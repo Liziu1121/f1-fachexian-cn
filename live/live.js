@@ -3,6 +3,8 @@
 
   const byId = id => document.getElementById(id);
   const page = byId('live');
+  const screen = byId('liveScreen');
+  const fullscreen = byId('liveFullscreen');
   const audio = byId('liveAudio');
   const select = byId('liveSelect');
   const refreshButton = byId('liveRefresh');
@@ -67,9 +69,13 @@
     return '';
   }
 
-  function sessionLabel(session) {
-    const known = Object.entries(window.F1_DATA.races).find(([, race]) => Object.values(race.sessions).some(
+  function sessionCircuit(session) {
+    return session && Object.entries(window.F1_DATA.races).find(([, race]) => Object.values(race.sessions).some(
       stamp => Math.abs(Date.parse(stamp) - session.startsAt) <= 15 * 60_000));
+  }
+
+  function sessionLabel(session) {
+    const known = sessionCircuit(session);
     const name = !english() && known ? content.circuit[known[0]][0] : session.location || session.circuit || session.country;
     return [name, english() ? session.name : sessionNames.get(session.name) || session.name].filter(Boolean).join(' · ');
   }
@@ -129,14 +135,16 @@
       `<li><time datetime="${new Date(item.date).toISOString()}">${clock(item.date)}</time><div>${html(controlText(item.message))}${item.lap ? `<small>${html(item.lap)} 圈</small>` : ''}</div></li>`).join('')}</ul>` : empty(details && !details.controlAvailable ? '赛会消息暂不可用' : '暂无赛会消息'));
 
     const clips = (details?.radio ?? []).filter(clip => link(clip.url));
-    const radioNotice = publicRadio ? '可在 Paddock Live 查看本场电台的文字转写。'
+    const radioNotice = publicRadio ? '本场电台与文字转写的入口见底部备注。'
       : details && !details.radioAvailable ? '电台数据暂不可用' : '暂无已发布的电台录音';
     setMarkup('liveClips', clips.length ? `<ul class="live-feed">${clips.map(item =>
       `<li><time datetime="${new Date(item.date).toISOString()}">${clock(item.date)}</time><div>${html(driverName(item.driver))}<small>${html(teamName(item.driver.team))}</small></div><button type="button" class="action outline live-play" data-recording="${html(item.url)}" aria-label="播放车队电台 · ${html(driverName(item.driver))}">播放</button></li>`).join('')}</ul>` : empty(radioNotice));
 
     const items = news?.items?.filter(item => link(item.url)) ?? [];
-    setMarkup('liveHeadlines', items.length ? `<ul class="live-feed live-articles">${items.map(item =>
-      `<li><div><a href="${html(item.url)}" target="_blank" rel="noopener" lang="en">${html(item.title)}</a><small>${html(item.source)} · <time datetime="${new Date(item.date).toISOString()}">${dateTime(item.date)}</time></small></div></li>`).join('')}</ul>` : empty(news?.scope === 'unavailable' ? '新闻来源暂不可用' : '暂无最新报道'));
+    setMarkup('liveHeadlines', items.length ? `<ul class="live-feed live-articles">${items.map(item => {
+      const translated = !english() && item.titleZh;
+      return `<li><div><a href="${html(item.url)}" target="_blank" rel="noopener" lang="${translated ? 'zh-CN' : 'en'}">${html(translated || item.title)}</a><small>${html(item.source)} · <time datetime="${new Date(item.date).toISOString()}">${dateTime(item.date)}</time></small></div></li>`;
+    }).join('')}</ul>` : empty(news?.scope === 'unavailable' ? '新闻来源暂不可用' : '暂无最新报道'));
     const scope = items.length ? news.scope === 'session' ? '本站相关报道' : '近期 F1 报道' : '';
     setText('liveNewsScope', scope);
     byId('liveNewsScope').hidden = !scope;
@@ -161,7 +169,7 @@
     const usePublic = visible && !byId('livePublicTiming').hidden;
     byId('livePublicControl').hidden = !usePublic;
     byId('liveControlMessages').hidden = usePublic;
-    showFrame(controlFrame, usePublic && !byId('liveControl').hidden);
+    showFrame(controlFrame, usePublic);
   }
 
   function drawTimingSource(showPublic) {
@@ -172,10 +180,25 @@
     byId('livePublicTiming').hidden = !showPublic;
     byId('liveTiming').hidden = showPublic;
     showFrame(timingFrame, showPublic);
-    const showMap = visible && !selected && (showPublic || Boolean(snapshot?.active));
-    byId('liveMapPanel').hidden = !showMap;
-    showFrame(mapFrame, showMap);
     updatePublicControl();
+  }
+
+  function drawMap(showPublic, session) {
+    const map = byId('liveTrackLayout');
+    const circuit = sessionCircuit(session)?.[0];
+    const code = circuit && content.circuit[circuit]?.[3];
+    const url = !showPublic && code ? `https://media.formula1.com/image/upload/c_fit,h_704/q_auto/v1740000001/common/f1/2026/track/2026track${code}detailed.webp` : '';
+    byId('liveMapWindow').hidden = !showPublic;
+    showFrame(mapFrame, showPublic);
+    if (url && map.getAttribute('src') !== url) {
+      map.hidden = false;
+      map.src = url;
+    } else if (!url) {
+      map.hidden = true;
+      map.removeAttribute('src');
+    }
+    byId('liveMapStatus').hidden = showPublic || !map.hidden;
+    setText('liveMapCaption', showPublic ? '车位按分段进度估算。' : map.hidden ? '' : '官方赛道布局');
   }
 
   function draw() {
@@ -190,6 +213,7 @@
     setText('liveState', status);
     byId('liveState').dataset.state = showPublic ? 'public' : view.archiveView ? 'archive' : upstream ?? 'loading';
     const relevant = details?.session ?? view.active ?? view.next;
+    drawMap(!selected && (showPublic || Boolean(view.active)), relevant);
     const title = showPublic && !view.active ? 'TELOS 免费实时计时' : relevant ? sessionLabel(relevant) : '计时与赛况';
     setText('liveRound', title);
     const schedule = view.active ? `计划开赛 · ${sessionLabel(view.active)} · ${dateTime(view.active.startsAt)}`
@@ -297,6 +321,11 @@
     request = null;
     refreshButton.removeAttribute('aria-busy');
     drawTimingSource(false);
+    showFrame(mapFrame, false);
+    if (screen.hasAttribute('data-focus')) {
+      screen.removeAttribute('data-focus');
+      updateFullscreen();
+    }
     stopAudio();
   }
 
@@ -315,20 +344,43 @@
 
   select.addEventListener('change', () => { location.hash = select.value ? `#/live/${select.value}` : '#/live'; });
   refreshButton.addEventListener('click', refresh);
+  function updateFullscreen() {
+    const active = document.fullscreenElement === screen || screen.hasAttribute('data-focus');
+    fullscreen.setAttribute('aria-pressed', String(active));
+    setText('liveFullscreen', active ? '退出全屏' : '全屏显示');
+  }
+  fullscreen.hidden = false;
+  fullscreen.addEventListener('click', async () => {
+    if (document.fullscreenElement === screen) {
+      await document.exitFullscreen().catch(() => {});
+      return;
+    }
+    if (!screen.hasAttribute('data-focus') && document.fullscreenEnabled) {
+      try {
+        await screen.requestFullscreen();
+        return;
+      } catch { /* Fullscreen can be blocked when the site is embedded. */ }
+    }
+    screen.toggleAttribute('data-focus');
+    updateFullscreen();
+  });
+  document.addEventListener('fullscreenchange', updateFullscreen);
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || !screen.hasAttribute('data-focus')) return;
+    screen.removeAttribute('data-focus');
+    updateFullscreen();
+    fullscreen.focus({ preventScroll: true });
+  });
+  byId('liveTrackLayout').addEventListener('error', event => {
+    event.target.hidden = true;
+    byId('liveMapStatus').hidden = false;
+  });
   timingToggle.addEventListener('click', () => {
     publicTimingChoice = byId('livePublicTiming').hidden;
     if (publicTimingChoice && snapshot?.active && snapshot.archiveView) stopAudio();
     draw();
   });
   page.addEventListener('click', event => {
-    const tab = event.target.closest('[data-live-panel]');
-    if (tab) {
-      page.querySelectorAll('[data-live-panel]').forEach(button => {
-        button.setAttribute('aria-pressed', String(button === tab));
-        byId(button.getAttribute('aria-controls')).hidden = button !== tab;
-      });
-      updatePublicControl();
-    }
     const play = event.target.closest('[data-recording]');
     if (!play || !link(play.dataset.recording)) return;
     recording = snapshot?.details?.radio.find(clip => clip.url === play.dataset.recording);

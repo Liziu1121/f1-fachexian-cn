@@ -16,7 +16,7 @@ F1 官方赛况报道|Official F1 session coverage
 F1 官方精选电台|Official F1 radio highlights
 Formuradar 实况与电台|Formuradar live timing & radio
 Paddock Live 电台与转写|Paddock Live team radio & transcripts
-可在 Paddock Live 查看本场电台的文字转写。|See this session’s team radio transcripts on Paddock Live.
+本场电台与文字转写的入口见底部备注。|The session radio and transcripts are linked in the notes below.
 免费实时计时|Free live timing
 TELOS 免费实时计时|TELOS free live timing
 计时与分段|Timing & sectors
@@ -79,3 +79,16 @@ OpenF1 数据说明|OpenF1 data documentation
 赛道红旗|Red flag
 方格旗|Chequered flag
 双黄旗|Double yellow flag
+数据来源与备用入口|Data sources and fallback links
+赛中计时和地图由 TELOS 更新。电台仅收录来源发布的片段。|TELOS updates the timing and map during sessions. Radio clips appear as their sources release them.
+车位按分段进度估算。|Car positions are estimated from sector progress.
+左右滑动可查看完整分段。|Scroll horizontally to see all timing sectors.
+新的赛会通知会在这里短暂显示。|New race control messages appear here briefly.
+全屏显示|Full screen
+退出全屏|Exit full screen
+等待赛道地图|Waiting for circuit map
+官方赛道布局|Official circuit layout
+计时与赛况|Timing and session information
+查看抖音官方账号|View the official Douyin account
+打开官方原视频|Open original video
+查看 F1 官方原文|Read on Formula 1

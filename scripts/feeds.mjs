@@ -39,7 +39,7 @@ export const originalData = cache(async path => {
   return response.json();
 }, 120_000);
 
-function xmlText(value) {
+export function xmlText(value) {
   const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
   return value.trim().replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, '$1').replace(
     /&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos);/gi,
@@ -73,32 +73,39 @@ const rss = publishers.map(([source, feed]) => cache(async () => {
   });
 }, 120_000));
 
-async function officialHeadlines() {
-  const [{ items }, page] = await Promise.all([
-    originalData('news/latest'),
-    request(`${official}/en/latest`).then(response => response.text()),
-  ]);
-  const links = new Map([...page.matchAll(/href="(\/en\/latest\/article\/[\w-]+\.([A-Za-z0-9]+))"/g)]
-    .map(([, path, id]) => [id, `${official}${path}`]));
-  return (items ?? []).flatMap(([id, stamp, title, summary]) => {
+export const officialNewsIndex = 'https://www.formula1.com/en/latest';
+const articlePath = /^\/en\/latest\/article\/[\w.-]+\.([A-Za-z0-9]{16,24})$/;
+export const officialNewsLinks = cache(async () => {
+  const page = await request(officialNewsIndex).then(response => response.text());
+  return new Map([...page.matchAll(/href="(\/en\/latest\/article\/[^"?]+)"/g)].flatMap(([, path]) => {
+    const id = path.match(articlePath)?.[1];
+    return id ? [[id, `${official}${path}`]] : [];
+  }));
+}, 120_000);
+
+export function officialArticleUrl(id) {
+  return /^[A-Za-z0-9]{16,24}$/.test(id) ? `${officialNewsIndex}/article/news.${id}` : '';
+}
+
+async function officialHeadlines(feed) {
+  const { items } = feed ?? await originalData('news/latest');
+  const links = await officialNewsLinks('latest').catch(() => new Map());
+  return (items ?? []).flatMap(([id, stamp, title, summary, , , zh, info]) => {
     const date = Date.parse(stamp);
-    const url = links.get(id);
-    return url && title && Number.isFinite(date) ? [{ title, url, date, source: 'F1', search: summary ?? '' }] : [];
+    const url = info?.url ?? links.get(id) ?? officialArticleUrl(id);
+    return url && title && Number.isFinite(date) ? [{ title, titleZh: zh?.title, url, date, source: 'F1', search: summary ?? '' }] : [];
   });
 }
 
-const headlines = cache(async () => {
-  const sources = await Promise.allSettled([
-    officialHeadlines(),
-    ...rss.map(read => read('f1')),
-  ]);
+const headlines = cache(async feed => {
+  const sources = await Promise.allSettled([officialHeadlines(feed), ...rss.map(read => read('f1'))]);
   if (sources.every(source => source.status === 'rejected')) throw new Error('News feeds unavailable');
   return sources.flatMap(source => source.status === 'fulfilled' ? source.value : []);
 }, 120_000);
 
-export async function liveNews(session, now) {
+export async function liveNews(session, now, feed) {
   try {
-    const articles = await headlines('f1');
+    const articles = await headlines(feed);
     const terms = [session?.location, session?.circuit]
       .filter(value => value && value.length >= 4).map(value => value.toLowerCase());
     const matches = articles.filter(item => item.date >= session?.startsAt - 72 * 3600_000
@@ -116,7 +123,7 @@ export async function liveNews(session, now) {
       titles.add(title);
       links.add(item.url);
       return true;
-    }).slice(0, 12).map(({ title, date, url, source }) => ({ title, date, url, source }));
+    }).slice(0, 12).map(({ title, titleZh, date, url, source }) => ({ title, titleZh, date, url, source }));
     return { items, scope: relevant ? 'session' : 'series', coverage: coverage?.url };
   } catch {
     return { items: [], scope: 'unavailable' };

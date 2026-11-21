@@ -1,8 +1,10 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { archiveDelay, archiveDetails, mirrorCalendar, openCalendar } from './live-data.mjs';
 import { fiaBulletins, liveNews } from './feeds.mjs';
+import { installContent, translateLiveHeadlines } from './build-content.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const site = join(root, 'public');
@@ -69,7 +71,17 @@ async function previousSnapshot() {
   }
 }
 
-async function buildSnapshots() {
+async function versionAssets() {
+  const index = join(site, 'index.html');
+  let page = await readText(index);
+  for (const file of ['live.css', 'content-data.js', 'live.js', 'locale.js', 'video.js', 'app.js']) {
+    const hash = createHash('sha256').update(await readFile(join(site, file))).digest('hex').slice(0, 12);
+    page = replaceOnce(page, `"./${file}"`, `"./${file}?v=${hash}"`, 'index.html');
+  }
+  await writeFile(index, page);
+}
+
+async function buildSnapshots(newsFeed) {
   const previous = await previousSnapshot();
   const bundled = mirrorCalendar(await readText(join(site, 'data.js')));
   const year = new Date(now).getUTCFullYear();
@@ -105,7 +117,10 @@ async function buildSnapshots() {
   const next = schedule.findLast(session => session.startsAt > now);
   const last = schedule.find(session => session.endsAt + archiveDelay <= now);
   const context = active ?? (next && next.startsAt - now < 3 * 86400_000 ? next : last ?? next);
-  const [news, bulletins] = await Promise.all([liveNews(context, now), fiaBulletins(context, schedule)]);
+  const [news, bulletins] = await Promise.all([
+    liveNews(context, now, newsFeed).then(feed => translateLiveHeadlines(feed, cacheDir)),
+    fiaBulletins(context, schedule),
+  ]);
   const sameContext = context?.startsAt === previous.contextStartsAt;
   const index = {
     generatedAt: now, schedule, archives, contextStartsAt: context?.startsAt,
@@ -114,7 +129,7 @@ async function buildSnapshots() {
   };
   await Promise.all([mkdir(snapshots, { recursive: true }), mkdir(cacheDir, { recursive: true })]);
   await Promise.all(archives.map(async session => {
-    const [news, bulletins] = await Promise.all([liveNews(session, now), fiaBulletins(session, schedule)]);
+    const [news, bulletins] = await Promise.all([liveNews(session, now, newsFeed), fiaBulletins(session, schedule)]);
     await writeJson(join(snapshots, `${session.key}.json`), { details: stored.get(session.key), news, bulletins });
   }));
   await writeJson(join(snapshots, 'index.json'), index);
@@ -124,4 +139,6 @@ async function buildSnapshots() {
 }
 
 await installDashboard();
-await buildSnapshots();
+const newsFeed = await installContent({ root, site, cacheDir, replaceOnce });
+await versionAssets();
+await buildSnapshots(newsFeed);

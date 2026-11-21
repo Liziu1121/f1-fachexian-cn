@@ -5,7 +5,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '37 */4 * * *'
+    - cron: '37 * * * *'
 
 permissions:
   contents: read
@@ -35,7 +35,7 @@ jobs:
           restore-keys: f1-live-v1-
       - name: Prepare the public site and data snapshots
         run: python3 scripts/build-mirror.py
-      - name: Add the live centre and archive snapshots
+      - name: Add the live centre and refresh news and video
         run: node scripts/build-live.mjs
       - uses: actions/upload-pages-artifact@v5
         with:
