@@ -2,7 +2,7 @@ import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { archiveDelay, archiveDetails, mirrorCalendar, openCalendar } from './live-data.mjs';
+import { archiveDelay, archiveDetails, circuitLayout, circuitLayoutKey, dashboardArchiveVersion, mirrorCalendar, openCalendar } from './live-data.mjs';
 import { fiaBulletins, liveNews } from './feeds.mjs';
 import { installContent, translateLiveHeadlines } from './build-content.mjs';
 
@@ -99,7 +99,10 @@ async function buildSnapshots(newsFeed) {
   const candidates = [...knownSessions.values()]
     .filter(session => /^\d{1,8}$/.test(session.key) && session.endsAt + archiveDelay <= now).sort(order).slice(0, 10);
   const onlineKeys = new Set(online.map(session => session.key));
-  const toFetch = candidates.filter(session => onlineKeys.has(session.key) && !stored.get(session.key)?.complete).slice(0, 4);
+  const toFetch = candidates.filter(session => {
+    const saved = stored.get(session.key);
+    return onlineKeys.has(session.key) && (!saved?.complete || saved.version !== dashboardArchiveVersion);
+  }).slice(0, 4);
   for (const session of toFetch) {
     try {
       const details = await archiveDetails(session);
@@ -114,13 +117,27 @@ async function buildSnapshots(newsFeed) {
   const archives = candidates.filter(session => stored.has(session.key));
 
   const context = schedule.find(session => session.startsAt <= now) ?? archives[0];
+  const next = schedule.findLast(session => session.startsAt > now);
+  const layoutCache = new Map(Object.entries(previous.layouts ?? {}));
+  const layoutSessions = new Map([context, next, archives[0]].filter(circuitLayoutKey).map(session => [circuitLayoutKey(session), session]));
+  const layouts = Object.fromEntries((await Promise.all([...layoutSessions].map(async ([key, session]) => {
+    let layout = layoutCache.get(key);
+    if (!layout) {
+      layout = await circuitLayout(session).catch(error => {
+        console.warn(`Circuit layout ${key}: ${error.message}`);
+        return null;
+      });
+      if (layout) layoutCache.set(key, layout);
+    }
+    return [key, layout];
+  }))).filter(([, layout]) => layout));
   const [news, bulletins] = await Promise.all([
     liveNews(context, now, newsFeed).then(feed => translateLiveHeadlines(feed, cacheDir)),
     fiaBulletins(context, schedule),
   ]);
   const sameContext = context?.startsAt === previous.contextStartsAt;
   const index = {
-    generatedAt: now, schedule, archives, contextStartsAt: context?.startsAt,
+    generatedAt: now, schedule, archives, layouts, contextStartsAt: context?.startsAt,
     news: sameContext && news.scope === 'unavailable' ? previous.news ?? news : news,
     bulletins: sameContext && bulletins.unavailable ? previous.bulletins ?? bulletins : bulletins,
   };
@@ -131,7 +148,7 @@ async function buildSnapshots(newsFeed) {
   }));
   await writeJson(join(snapshots, 'index.json'), index);
   const latest = Object.fromEntries(archives.map(session => [session.key, stored.get(session.key)]));
-  await writeJson(join(cacheDir, 'snapshots.json'), { ...index, archives: latest });
+  await writeJson(join(cacheDir, 'snapshots.json'), { ...index, archives: latest, layouts: Object.fromEntries([...layoutCache].slice(-32)) });
   console.log(`Live centre ready: ${schedule.length} calendar entries, ${archives.length} archives, ${index.news.items.length} news items.`);
 }
 

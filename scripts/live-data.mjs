@@ -2,6 +2,7 @@ import { request } from './feeds.mjs';
 import { withArchiveAudio } from './radio-archive.mjs';
 
 export const archiveDelay = 30 * 60_000;
+export const dashboardArchiveVersion = 1;
 const api = 'https://api.openf1.org/v1';
 let nextRequest = Promise.resolve();
 
@@ -9,7 +10,13 @@ async function openF1(path, params) {
   const turn = nextRequest;
   nextRequest = turn.then(() => new Promise(resolve => setTimeout(resolve, 400)));
   await turn;
-  const response = await request(`${api}/${path}?${new URLSearchParams(params)}`);
+  let response;
+  try {
+    response = await request(`${api}/${path}?${new URLSearchParams(params)}`);
+  } catch (error) {
+    if (path !== 'sessions' && error.message === 'Source returned HTTP 404') return [];
+    throw error;
+  }
   const rows = await response.json();
   if (!Array.isArray(rows)) throw new Error(`Unexpected OpenF1 response for ${path}`);
   return rows;
@@ -21,7 +28,7 @@ export async function openCalendar(year) {
     const endsAt = Date.parse(row.date_end);
     const key = String(row.session_key);
     if (row.is_cancelled || /testing/i.test(row.session_name) || !/^\d{1,8}$/.test(key) || !(endsAt > startsAt)) return [];
-    return [{ key, startsAt, endsAt, meeting: row.meeting_key, name: row.session_name, type: row.session_type,
+    return [{ key, startsAt, endsAt, meeting: row.meeting_key, circuitKey: row.circuit_key, name: row.session_name, type: row.session_type,
       location: row.location, country: row.country_name, circuit: row.circuit_short_name }];
   });
 }
@@ -46,16 +53,34 @@ export function mirrorCalendar(data) {
   });
 }
 
+export function circuitLayoutKey(session) {
+  if (!Number.isInteger(session?.circuitKey) || session.circuitKey <= 0) return '';
+  return `${new Date(session.startsAt).getUTCFullYear()}-${session.circuitKey}`;
+}
+
+export async function circuitLayout(session) {
+  const year = new Date(session.startsAt).getUTCFullYear();
+  const url = new URL(`https://api.t1f1.com/api/static/circuits/${session.circuitKey}/data`);
+  url.searchParams.set('year', year);
+  const { data } = await request(url).then(response => response.json());
+  const { x, y } = data?.track_outline ?? {};
+  if (Number(data?.year) !== year || Number(data.circuit_id) !== session.circuitKey ||
+      !Array.isArray(x) || !Array.isArray(y) || x.length !== y.length || x.length < 3 || x.length > 12_000 ||
+      !x.every(Number.isFinite) || !y.every(Number.isFinite)) return null;
+  const corners = (data.corners ?? []).flatMap(({ number, position, letter }) => {
+    if (!Number.isInteger(number) || !Number.isFinite(position?.x) || !Number.isFinite(position.y)) return [];
+    return [{ x: position.x, y: position.y, label: `${number}${letter ?? ''}` }];
+  });
+  return { x: x.map(Math.round), y: y.map(Math.round), corners, rotation: Number(data.rotation) || 0 };
+}
+
 function lapSummary(laps) {
   const summary = new Map();
   for (const lap of laps) {
     if (!Number.isFinite(lap.lap_duration) || lap.lap_duration <= 0 || !lap.lap_number) continue;
-    const value = summary.get(lap.driver_number) ?? { best: Infinity, completed: 0, last: null };
-    if (!lap.is_pit_out_lap) value.best = Math.min(value.best, lap.lap_duration);
-    if (value.completed <= lap.lap_number) {
-      value.last = lap.lap_duration;
-      value.completed = lap.lap_number;
-    }
+    const value = summary.get(lap.driver_number) ?? {};
+    if (!lap.is_pit_out_lap && (!value.best || lap.lap_duration < value.best.lap_duration)) value.best = lap;
+    if (!value.last || value.last.lap_number <= lap.lap_number) value.last = lap;
     summary.set(lap.driver_number, value);
   }
   return summary;
@@ -75,8 +100,29 @@ function radioUrl(value) {
   return null;
 }
 
+function byDriver(items) {
+  const values = new Map();
+  for (const item of items) {
+    if (!values.has(item.driver_number)) values.set(item.driver_number, []);
+    values.get(item.driver_number).push(item);
+  }
+  return values;
+}
+
+function timedLap(lap) {
+  if (!lap) return null;
+  return {
+    number: lap.lap_number, speed: lap.st_speed,
+    sectors: [1, 2, 3].map(i => ({
+      time: lap[`duration_sector_${i}`],
+      segments: lap[`segments_sector_${i}`] ?? [],
+    })),
+  };
+}
+
 export async function archiveDetails(session) {
-  const names = ['session_result', 'laps', 'race_control', 'team_radio', 'drivers'];
+  const names = ['session_result', 'laps', 'race_control', 'team_radio', 'drivers', 'stints', 'pit', 'weather'];
+  if (session.type === 'Race') names.push('intervals');
   const results = await Promise.allSettled(names.map(name => openF1(name, { session_key: session.key })));
   const feeds = Object.fromEntries(names.map((name, index) => [name, results[index].value]));
   const identity = new Map((feeds.drivers ?? []).map(row => [row.driver_number, {
@@ -85,24 +131,41 @@ export async function archiveDetails(session) {
   }]));
   const driver = number => identity.get(number) ?? { number };
   const laps = lapSummary(feeds.laps ?? []);
+  const stints = byDriver(feeds.stints ?? []);
+  const stops = byDriver(dated(feeds.pit ?? []));
+  const intervals = byDriver(dated(feeds.intervals ?? []));
   const rows = (feeds.session_result ?? []).map(row => {
-    const lap = laps.get(row.driver_number);
+    const number = row.driver_number;
+    const lap = laps.get(number);
     const gap = Array.isArray(row.gap_to_leader) ? row.gap_to_leader.findLast(value => value != null) : row.gap_to_leader;
     const times = [row.duration].flat().filter(value => Number.isFinite(value) && value > 0);
-    const best = session.type !== 'Race' && times.length ? Math.min(...times) : lap?.best;
-    return { driver: driver(row.driver_number), position: row.position ?? null,
+    const best = session.type !== 'Race' && times.length ? Math.min(...times) : lap?.best?.lap_duration;
+    const tyreStints = (stints.get(number) ?? []).sort((a, b) => a.stint_number - b.stint_number).map(stint => ({
+      compound: stint.compound, start: stint.lap_start, end: stint.lap_end, ageAtStart: stint.tyre_age_at_start,
+    }));
+    const pit = stops.get(number);
+    return { driver: driver(number), position: row.position ?? null,
       finish: row.dsq ? 'DSQ' : row.dns ? 'DNS' : row.dnf ? 'DNF' : null,
-      gap: gap ?? null, best: Number.isFinite(best) ? best : null, last: lap?.last ?? null, laps: row.number_of_laps ?? null };
+      gap: gap ?? null, interval: intervals.get(number)?.[0]?.interval ?? null,
+      best: Number.isFinite(best) ? best : null, last: lap?.last?.lap_duration ?? null, laps: row.number_of_laps ?? null,
+      measuredLap: timedLap(lap?.best), tyreStints,
+      pitCount: feeds.pit ? pit?.length ?? 0 : null,
+      lastPit: pit?.length ? { lap: pit[0].lap_number, stop: pit[0].stop_duration } : null,
+    };
   }).sort((a, b) => (a.position ?? 99) - (b.position ?? 99));
   const controls = dated(feeds.race_control ?? []);
   const events = controls.filter(row => row.message && !(row.scope === 'Sector' && row.flag === 'CLEAR')).slice(0, 32)
-    .map(row => ({ date: row.date, lap: row.lap_number, message: row.message }));
+    .map(row => ({ date: row.date, lap: row.lap_number, message: row.message, flag: row.flag }));
   const clips = dated(feeds.team_radio ?? []).flatMap(row => {
     const url = radioUrl(row.recording_url);
     return url ? [{ date: row.date, driver: driver(row.driver_number), url }] : [];
   }).slice(0, 30);
+  const weather = dated(feeds.weather ?? [])[0];
   return { session, rows, events, radio: await withArchiveAudio(session, clips),
     controlAvailable: Boolean(feeds.race_control), radioAvailable: Boolean(feeds.team_radio),
+    weather: weather ? { date: weather.date, air: weather.air_temperature, track: weather.track_temperature,
+      humidity: weather.humidity, wind: weather.wind_speed, rain: weather.rainfall } : null,
+    version: dashboardArchiveVersion,
     updatedAt: controls[0]?.date ?? session.endsAt,
-    complete: rows.length > 0 && identity.size > 0 && results.every(result => result.status === 'fulfilled') };
+    complete: rows.length > 0 && identity.size > 0 && results.slice(0, 5).every(result => result.status === 'fulfilled') };
 }

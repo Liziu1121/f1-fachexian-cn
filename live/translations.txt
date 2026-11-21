@@ -78,3 +78,46 @@ OpenF1 数据说明|OpenF1 data documentation
 查看抖音官方账号|View the official Douyin account
 打开官方原视频|Open original video
 查看 F1 官方原文|Read on Formula 1
+赛道状态和圈数|Track status and lap count
+实时计时与分段|Live timing and sector splits
+所列分段取自最快计时圈|Splits from the fastest recorded lap
+全场最快|Session best
+个人最快|Personal best
+慢于最佳|Slower than best
+维修区|Pit lane
+距前车|Interval
+进站|Pits
+车手详情|Driver detail
+领先车手|Race leader
+领先车手实时详情|Live race leader detail
+最快圈测速点|Fastest-lap speed trap
+轮胎使用圈数|Tyre age
+进站次数|Pit visits
+轮胎策略|Tyre strategy
+暂无车手分段和策略数据|Driver splits and strategy are unavailable
+赛道轮廓和弯角编号|Circuit outline and corner numbers
+轮廓与弯角|Layout and corners
+赛况流|Session feed
+筛选赛况流|Filter session feed
+新通知出现后会在这里短暂显示。|New notifications appear here briefly.
+本站资讯|This weekend
+排名第一|Session leader
+赛道温度|Track temperature
+有降雨|Rain
+无降雨|Dry
+气温|Air temperature
+湿度|Humidity
+风速|Wind
+安全车本圈进站|Safety car in this lap
+虚拟安全车即将结束|Virtual safety car ending
+维修区出口开放|Pit exit open
+维修区出口关闭|Pit exit closed
+DRS 已启用|DRS enabled
+DRS 已关闭|DRS disabled
+赛中计时、赛道状态和估算车位来自 TELOS，实时组件以计时源显示的场次为准。赛后圈速、轮胎、天气及已发布电台来自 OpenF1，赛道轮廓来自 Turn One。|TELOS provides live timing, track status and estimated positions. The widgets identify the session they are receiving. OpenF1 provides post-session laps, tyres, weather and published radio. Turn One provides the circuit outline.
+TELOS 实况组件|TELOS live widgets
+Turn One 赛道数据|Turn One circuit data
+F1Archive 电台档案|F1Archive radio archive
+最近进站|Last pit visit
+停站用时|Stationary time
+旗况|Track flag
