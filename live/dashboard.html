@@ -11,8 +11,6 @@
           </p>
         </div>
         <div class="live-controls">
-          <label class="sr-only" for="liveSelect">选择场次</label>
-          <select id="liveSelect"><option value="">当前 / 最近场次</option></select>
           <button class="action outline" id="liveRefresh" type="button">刷新</button>
           <button class="action outline" id="liveFullscreen" type="button" hidden>全屏显示</button>
         </div>
@@ -22,11 +20,10 @@
         <section class="live-panel" aria-labelledby="liveTimingTitle">
           <div class="live-panel-head">
             <h2 id="liveTimingTitle">计时榜</h2>
-            <button class="action outline" type="button" id="liveTimingToggle" aria-controls="livePublicTiming" aria-expanded="false">免费实时计时</button>
           </div>
           <div id="livePublicTiming" hidden>
             <div class="live-timing-window" role="region" aria-label="实时分段计时" tabindex="0">
-              <iframe id="liveTimingFrame" title="TELOS 免费实时计时" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" loading="lazy" data-src="https://telos.connexastudios.com/obs/table?cols=pit%2Ctyre%2Claps%2Cleader%2Cgap%2Clast%2Cbest%2Cmini%2Cls%2Cbs&amp;bg=solid"></iframe>
+              <iframe id="liveTimingFrame" title="实时分段计时" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" loading="lazy" data-src="https://telos.connexastudios.com/obs/table?cols=pit%2Ctyre%2Claps%2Cleader%2Cgap%2Clast%2Cbest%2Cmini%2Cls%2Cbs&amp;bg=solid"></iframe>
             </div>
             <p class="sub live-timing-hint">左右滑动可查看完整分段。</p>
           </div>

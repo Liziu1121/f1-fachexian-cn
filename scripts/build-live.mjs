@@ -52,7 +52,7 @@ async function installDashboard() {
   routes = replaceOnce(routes, 'weekend:"race",form:', 'weekend:"race",live:"trackside",form:', 'app.js');
   const routeSetup = '    selectedFromCalendar=undefined;\n';
   routes = replaceOnce(routes, routeSetup, `${routeSetup}    if (previous==="live" && changed) window.F1_LIVE.hide();\n`, 'app.js');
-  routes = replaceOnce(routes, '      case "form":', '      case "live":\n        window.F1_LIVE.show(key);\n        break;\n      case "form":', 'app.js');
+  routes = replaceOnce(routes, '      case "form":', '      case "live":\n        window.F1_LIVE.show();\n        break;\n      case "form":', 'app.js');
   const localeAnchor = '比赛周末|Race Weekend\n';
   const labels = replaceOnce(locale, localeAnchor, localeAnchor + translations, 'locale.js');
 
@@ -113,10 +113,7 @@ async function buildSnapshots(newsFeed) {
   }
   const archives = candidates.filter(session => stored.has(session.key));
 
-  const active = schedule.find(session => session.startsAt <= now && session.endsAt + archiveDelay > now);
-  const next = schedule.findLast(session => session.startsAt > now);
-  const last = schedule.find(session => session.endsAt + archiveDelay <= now);
-  const context = active ?? (next && next.startsAt - now < 3 * 86400_000 ? next : last ?? next);
+  const context = schedule.find(session => session.startsAt <= now) ?? archives[0];
   const [news, bulletins] = await Promise.all([
     liveNews(context, now, newsFeed).then(feed => translateLiveHeadlines(feed, cacheDir)),
     fiaBulletins(context, schedule),

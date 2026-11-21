@@ -2,8 +2,6 @@
 F1 官方计时|Official F1 Live Timing
 正在读取实况|Loading live centre
 计时与赛况|Timing and track updates
-当前 / 最近场次|Current / latest session
-选择场次|Select session
 计时榜|Timing board
 赛况动态|Track updates
 赛会消息|Race control
@@ -17,9 +15,7 @@ F1 官方精选电台|Official F1 radio highlights
 Formuradar 实况与电台|Formuradar live timing & radio
 Paddock Live 电台与转写|Paddock Live team radio & transcripts
 本场电台与文字转写的入口见底部备注。|The session radio and transcripts are linked in the notes below.
-免费实时计时|Free live timing
 TELOS 免费实时计时|TELOS free live timing
-计时与分段|Timing & sectors
 实时分段计时|Live sector timing
 左右滑动可查看完整分段。|Scroll sideways to see every sector column.
 赛道地图|Track map
@@ -29,11 +25,8 @@ TELOS 赛道地图|TELOS track map
 TELOS 赛会即时消息|TELOS race control ticker
 新的赛会通知会在这里短暂显示。|New race control messages appear here briefly.
 查看完整赛会消息|Open full race control feed
-返回本站计时|Back to site timing
-公开计时|Public timing
 在 TELOS 打开|Open in TELOS
 场次以榜单标题为准。|The timing board header identifies the session.
-当前场次可用 TELOS 免费计时。|Free TELOS timing is available for the current session.
 新闻与公告|News & decisions
 资讯快照发布于|News snapshot published
 Autosport 文字直播|Autosport live text
@@ -45,9 +38,7 @@ FIA 公告暂不可用|FIA decisions temporarily unavailable
 OpenF1 数据说明|OpenF1 data documentation
 排名|Position
 领先差|Gap to leader
-距前车|Interval
 上一圈|Last lap
-已完成场次|Completed session
 暂无计时数据|No timing data available
 暂无赛会消息|No race control messages
 赛会消息暂不可用|Race control messages are temporarily unavailable
@@ -57,18 +48,17 @@ OpenF1 数据说明|OpenF1 data documentation
 新闻来源暂不可用|News feeds are temporarily unavailable
 本站相关报道|Reports about this Grand Prix
 近期 F1 报道|Recent F1 headlines
-下一场|Next session
 计划开赛|Scheduled start
 数据更新|Data updated
 北京时区|Beijing time
-实况更新中|Live updates
-赛程间歇|Between sessions
-等待计时信号|Waiting for timing data
-计时更新延迟|Timing feed delayed
-该场次已结束|Session ended
+赛中实况|Live session
+赛况确认中|Confirming session status
+最近一场 · 已结束|Latest session · Ended
+最近场次的计时快照正在同步。|Waiting for the latest session’s timing snapshot.
+等待开赛|Waiting for a session to start
 计时源暂不可用|Timing feed temporarily unavailable
-已保留上次成功加载的数据。|Showing the last successfully loaded data.
-现场计时未接入|Live timing unavailable
+赛程更新暂不可用，按上次加载的赛程显示。|Schedule updates are unavailable. Showing the last loaded schedule.
+快照更新暂不可用，已保留本场上次加载的赛况。|Timing updates are unavailable. Showing the last saved snapshot for this session.
 场次进行中|Session started
 场次结束|Session finished
 场次暂停|Session suspended
@@ -81,14 +71,10 @@ OpenF1 数据说明|OpenF1 data documentation
 双黄旗|Double yellow flag
 数据来源与备用入口|Data sources and fallback links
 赛中计时和地图由 TELOS 更新。电台仅收录来源发布的片段。|TELOS updates the timing and map during sessions. Radio clips appear as their sources release them.
-车位按分段进度估算。|Car positions are estimated from sector progress.
-左右滑动可查看完整分段。|Scroll horizontally to see all timing sectors.
-新的赛会通知会在这里短暂显示。|New race control messages appear here briefly.
 全屏显示|Full screen
 退出全屏|Exit full screen
 等待赛道地图|Waiting for circuit map
 官方赛道布局|Official circuit layout
-计时与赛况|Timing and session information
 查看抖音官方账号|View the official Douyin account
 打开官方原视频|Open original video
 查看 F1 官方原文|Read on Formula 1

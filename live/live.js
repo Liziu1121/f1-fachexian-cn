@@ -6,9 +6,7 @@
   const screen = byId('liveScreen');
   const fullscreen = byId('liveFullscreen');
   const audio = byId('liveAudio');
-  const select = byId('liveSelect');
   const refreshButton = byId('liveRefresh');
-  const timingToggle = byId('liveTimingToggle');
   const timingFrame = byId('liveTimingFrame');
   const mapFrame = byId('liveMapFrame');
   const controlFrame = byId('liveControlFrame');
@@ -25,18 +23,15 @@
     ['Sprint Qualifying', '冲刺排位赛'], ['Sprint Shootout', '冲刺排位赛'], ['Sprint', '冲刺赛'], ['Race', '正赛'],
   ]);
   const states = {
-    live: '实况更新中', scheduled: '赛程间歇', off: '赛程间歇', waiting: '等待计时信号',
-    stale: '计时更新延迟', ended: '该场次已结束', unavailable: '计时源暂不可用', subscription: '现场计时未接入',
+    live: '赛中实况', settling: '赛况确认中', recent: '最近一场 · 已结束',
+    waiting: '等待开赛', unavailable: '计时源暂不可用',
   };
   const english = () => window.F1_LOCALE.english();
   let visible = false;
-  let selected = '';
   let timer;
   let request;
   let snapshot;
-  let loadFailed = false;
   let recording;
-  let publicTimingChoice;
   const archiveDelay = 30 * 60_000;
 
   function setMarkup(id, value) {
@@ -114,18 +109,21 @@
     }[value] ?? value;
   }
 
-  function drawTiming(details, archive) {
-    if (!details?.rows.length) return setMarkup('liveTiming', empty('暂无计时数据'));
+  function drawTiming(details, mode) {
+    if (!details?.rows.length) {
+      const status = mode === 'recent' ? '最近场次的计时快照正在同步。' : '暂无计时数据';
+      return setMarkup('liveTiming', empty(status));
+    }
     const race = details.session.type === 'Race';
     const rows = details.rows.map(row => {
       const driver = row.driver;
       const color = /^#[\da-f]{6}$/i.test(driver.color) ? ` style="--team-color:${driver.color}"` : '';
       return `<tr><td>${html(row.finish ?? row.position ?? '—')}</td><th scope="row"${color}><span>${html(driverName(driver))}</span><small>${html([driver.code, teamName(driver.team)].filter(Boolean).join(' · '))}</small></th>` +
-        (race ? `<td>${html(gap(row.gap))}</td>${archive ? '' : `<td class="live-interval">${html(gap(row.interval))}</td>`}` : '') +
+        (race ? `<td>${html(gap(row.gap))}</td>` : '') +
         `<td>${lapTime(row.best)}</td><td class="live-last">${lapTime(row.last)}</td><td>${html(row.laps ?? '—')}</td></tr>`;
     }).join('');
     setMarkup('liveTiming', `<table class="live-table"><thead><tr><th scope="col">排名</th><th scope="col">车手</th>` +
-      (race ? `<th scope="col">领先差</th>${archive ? '' : '<th class="live-interval" scope="col">距前车</th>'}` : '') +
+      (race ? '<th scope="col">领先差</th>' : '') +
       `<th scope="col">最快圈</th><th scope="col" class="live-last">上一圈</th><th scope="col">圈数</th></tr></thead><tbody>${rows}</tbody></table>`);
   }
 
@@ -165,22 +163,13 @@
     if (!open && frame.hasAttribute('src')) frame.removeAttribute('src');
   }
 
-  function updatePublicControl() {
-    const usePublic = visible && !byId('livePublicTiming').hidden;
-    byId('livePublicControl').hidden = !usePublic;
-    byId('liveControlMessages').hidden = usePublic;
-    showFrame(controlFrame, usePublic);
-  }
-
-  function drawTimingSource(showPublic) {
-    timingToggle.hidden = Boolean(selected);
-    timingToggle.setAttribute('aria-expanded', String(showPublic));
-    setText('liveTimingToggle', showPublic ? '返回本站计时' : '免费实时计时');
-    setText('liveTimingTitle', showPublic ? '计时与分段' : '计时榜');
-    byId('livePublicTiming').hidden = !showPublic;
-    byId('liveTiming').hidden = showPublic;
-    showFrame(timingFrame, showPublic);
-    updatePublicControl();
+  function drawLiveFrames(isLive) {
+    byId('livePublicTiming').hidden = !isLive;
+    byId('liveTiming').hidden = isLive;
+    byId('livePublicControl').hidden = !isLive;
+    byId('liveControlMessages').hidden = isLive;
+    showFrame(timingFrame, isLive);
+    showFrame(controlFrame, isLive);
   }
 
   function drawMap(showPublic, session) {
@@ -202,46 +191,26 @@
   }
 
   function draw() {
-    const view = snapshot ?? {};
-    const upstream = loadFailed ? 'unavailable' : view.status;
-    const preferPublic = upstream === 'unavailable' || Boolean(view.active && ['subscription', 'stale'].includes(upstream));
-    const showPublic = !selected && (publicTimingChoice ?? preferPublic);
-    drawTimingSource(showPublic);
-    byId('liveQualifyingDetails').hidden = !/qualifying|shootout/i.test(view.active?.name ?? '');
-    const details = showPublic && view.archiveView && view.active ? null : view.details;
-    const status = showPublic ? '公开计时' : details && view.archiveView ? '已完成场次' : states[upstream] || '正在读取实况';
-    setText('liveState', status);
-    byId('liveState').dataset.state = showPublic ? 'public' : view.archiveView ? 'archive' : upstream ?? 'loading';
-    const relevant = details?.session ?? view.active ?? view.next;
-    drawMap(!selected && (showPublic || Boolean(view.active)), relevant);
-    const title = showPublic && !view.active ? 'TELOS 免费实时计时' : relevant ? sessionLabel(relevant) : '计时与赛况';
-    setText('liveRound', title);
-    const schedule = view.active ? `计划开赛 · ${sessionLabel(view.active)} · ${dateTime(view.active.startsAt)}`
-      : view.next ? `下一场 · ${sessionLabel(view.next)} · ${dateTime(view.next.startsAt)}` : '';
-    setText('liveSchedule', schedule ? `${schedule} · 北京时区` : '');
-    const meta = [];
-    if (!showPublic && details?.updatedAt) meta.push(`数据更新 ${dateTime(details.updatedAt)} · 北京时区`);
-    if (!showPublic && upstream === 'live' && details?.flag) meta.push(controlText(details.flag));
-    if (!showPublic && upstream === 'live' && details?.session.type === 'Race' && details.rows[0]?.laps) meta.push(`${details.rows[0].laps} 圈`);
-    setText('liveMeta', meta.join(' / '));
-    const notice = showPublic ? '' : upstream === 'subscription' && !selected ? '当前场次可用 TELOS 免费计时。'
-      : upstream === 'stale' && details ? '计时更新延迟。已保留上次成功加载的数据。'
-      : upstream === 'unavailable' ? `计时源暂不可用。${loadFailed && details ? '已保留上次成功加载的数据。' : ''}` : '';
+    const { session, mode, details, news, bulletins, generatedAt, scheduleUnavailable, archiveUnavailable } = snapshot ?? {};
+    const isLive = mode === 'live' || mode === 'settling';
+    drawLiveFrames(isLive);
+    drawMap(isLive, session);
+    byId('liveQualifyingDetails').hidden = !isLive || !/qualifying|shootout/i.test(session.name);
+    setText('liveState', states[mode] ?? '正在读取实况');
+    byId('liveState').dataset.state = mode ?? 'loading';
+    setText('liveRound', session ? sessionLabel(session) : '计时与赛况');
+    setText('liveSchedule', session ? `计划开赛 · ${dateTime(session.startsAt)} · 北京时区` : '');
+    setText('liveMeta', details?.updatedAt ? `数据更新 ${dateTime(details.updatedAt)} · 北京时区` : '');
+    const notice = scheduleUnavailable && session ? '赛程更新暂不可用，按上次加载的赛程显示。'
+      : archiveUnavailable && details ? '快照更新暂不可用，已保留本场上次加载的赛况。' : '';
     setText('liveNotice', notice);
     byId('liveNotice').hidden = !notice;
 
-    const archives = [...(view.archives ?? [])];
-    if (selected && details && !archives.some(session => session.key === selected)) archives.unshift(details.session);
-    const optionList = '<option value="">当前 / 最近场次</option>' + archives.map(session =>
-      `<option value="${html(session.key)}">${dateTime(session.startsAt)} · ${html(sessionLabel(session))}</option>`).join('');
-    if (document.activeElement !== select || [...select.options].every(option => option.value !== selected)) setMarkup('liveSelect', optionList);
-    select.value = selected;
-    drawTiming(details, view.archiveView);
-    const publicRadio = !selected && Boolean(view.active) && (view.archiveView || !details?.radioAvailable);
-    drawFeeds(details, view.news, view.bulletins, publicRadio);
+    if (!isLive) drawTiming(details, mode);
+    drawFeeds(details, news, bulletins, isLive);
     const timestamp = byId('liveSnapshotAt');
-    timestamp.hidden = !Number.isFinite(view.generatedAt);
-    if (!timestamp.hidden) setText('liveSnapshotAt', `资讯快照发布于 · ${dateTime(view.generatedAt)} · 北京时区`);
+    timestamp.hidden = !news?.items?.length || !Number.isFinite(generatedAt);
+    if (!timestamp.hidden) setText('liveSnapshotAt', `资讯快照发布于 · ${dateTime(generatedAt)} · 北京时区`);
   }
 
   function stopAudio() {
@@ -271,20 +240,48 @@
     return response.json();
   }
 
-  async function readView(key, signal) {
-    const data = await readSnapshot('index', signal);
+  function sameSession(first, second) {
+    if (!first || !second) return false;
+    if (first.key && second.key) return first.key === second.key;
+    return first.name === second.name && Math.abs(first.startsAt - second.startsAt) <= 15 * 60_000;
+  }
+
+  async function readView(signal) {
+    const loaded = await readSnapshot('index', signal).catch(() => null);
+    const index = loaded ?? snapshot?.index;
+    if (!index) return { mode: 'unavailable', pollMs: 15_000 };
+
     const now = Date.now();
-    const active = data.schedule.find(session => session.startsAt <= now && session.endsAt + archiveDelay > now);
-    const next = data.schedule.findLast(session => session.startsAt > now);
-    const archive = key ? data.archives.find(session => session.key === key) : data.archives[0];
-    const saved = archive && await readSnapshot(archive.key, signal).catch(() => null);
-    const snapshotNews = data.contextStartsAt === active?.startsAt || !active
-      ? data.news : { ...data.news, coverage: undefined };
-    const status = key ? saved ? 'off' : 'unavailable' : active ? 'subscription' : next ? 'scheduled' : 'off';
-    return { active, next, status, archives: data.archives, details: saved?.details, archiveView: Boolean(saved?.details),
-      generatedAt: data.generatedAt, news: (key && saved?.news) || snapshotNews,
-      bulletins: (key && saved?.bulletins) || data.bulletins,
-      pollMs: key ? 60_000 : Math.max(1_000, Math.min(60_000, (next?.startsAt ?? Infinity) - now)) };
+    const scheduled = index.schedule.find(session => session.startsAt <= now);
+    const latestSaved = index.archives.find(session => session.startsAt <= now);
+    const session = scheduled ?? latestSaved;
+    const next = index.schedule.findLast(session => session.startsAt > now);
+    const archive = index.archives.find(candidate => sameSession(candidate, session));
+    const liveUntil = session ? session.endsAt + archiveDelay : Infinity;
+    let mode = 'waiting';
+    if (session) {
+      if (archive || now >= liveUntil) mode = 'recent';
+      else mode = now < session.endsAt ? 'live' : 'settling';
+    }
+
+    const nextChange = mode === 'live' ? session.endsAt : mode === 'settling' ? liveUntil : Infinity;
+    const pollMs = Math.max(1_000, Math.min(loaded ? 60_000 : 15_000, (next?.startsAt ?? Infinity) - now, nextChange - now));
+    const archivedData = archive ? await readSnapshot(archive.key, signal).catch(() => null) : null;
+    const validArchive = sameSession(archivedData?.details?.session, session);
+    const lastGood = sameSession(snapshot?.saved?.details?.session, session) ? snapshot.saved : null;
+    const saved = mode === 'recent' ? validArchive ? archivedData : lastGood : null;
+
+    const context = [...index.schedule, ...index.archives].find(candidate => candidate.startsAt === index.contextStartsAt);
+    const sameContext = sameSession(context, session);
+    const sameWeekend = sameContext || (session?.meeting != null && session.meeting === context?.meeting);
+    return {
+      index, session, mode, saved, details: saved?.details, pollMs,
+      generatedAt: index.generatedAt,
+      scheduleUnavailable: !loaded,
+      archiveUnavailable: Boolean(archive && !validArchive),
+      news: sameWeekend ? { ...index.news, coverage: sameContext ? index.news?.coverage : undefined } : saved?.news,
+      bulletins: sameWeekend ? index.bulletins : saved?.bulletins,
+    };
   }
 
   async function refresh() {
@@ -295,15 +292,16 @@
     refreshButton.setAttribute('aria-busy', 'true');
     let pollMs = 60_000;
     try {
-      const view = await readView(selected, AbortSignal.any([pending.signal, AbortSignal.timeout(30_000)]));
+      const view = await readView(AbortSignal.any([pending.signal, AbortSignal.timeout(15_000)]));
       if (request !== pending) return;
-      if (snapshot?.details && snapshot.details.session.key !== view.details?.session.key) stopAudio();
+      if (recording && !sameSession(snapshot?.session, view.session)) stopAudio();
       snapshot = view;
-      loadFailed = false;
       pollMs = view.pollMs;
     } catch {
       if (request !== pending) return;
-      loadFailed = true;
+      if (recording) stopAudio();
+      snapshot = { mode: 'unavailable' };
+      pollMs = 15_000;
     } finally {
       if (request === pending) {
         request = null;
@@ -320,7 +318,7 @@
     request?.abort();
     request = null;
     refreshButton.removeAttribute('aria-busy');
-    drawTimingSource(false);
+    drawLiveFrames(false);
     showFrame(mapFrame, false);
     if (screen.hasAttribute('data-focus')) {
       screen.removeAttribute('data-focus');
@@ -329,20 +327,14 @@
     stopAudio();
   }
 
-  function show(key) {
-    const next = /^\d{1,8}$/.test(key ?? '') ? key : '';
-    if (visible && next === selected) return;
-    hide();
-    selected = next;
+  function show() {
+    if (visible) return;
     snapshot = null;
-    loadFailed = false;
-    publicTimingChoice = undefined;
     visible = true;
     draw();
     refresh();
   }
 
-  select.addEventListener('change', () => { location.hash = select.value ? `#/live/${select.value}` : '#/live'; });
   refreshButton.addEventListener('click', refresh);
   function updateFullscreen() {
     const active = document.fullscreenElement === screen || screen.hasAttribute('data-focus');
@@ -374,11 +366,6 @@
   byId('liveTrackLayout').addEventListener('error', event => {
     event.target.hidden = true;
     byId('liveMapStatus').hidden = false;
-  });
-  timingToggle.addEventListener('click', () => {
-    publicTimingChoice = byId('livePublicTiming').hidden;
-    if (publicTimingChoice && snapshot?.active && snapshot.archiveView) stopAudio();
-    draw();
   });
   page.addEventListener('click', event => {
     const play = event.target.closest('[data-recording]');
