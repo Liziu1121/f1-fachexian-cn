@@ -1,0 +1,127 @@
+import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { archiveDelay, archiveDetails, mirrorCalendar, openCalendar } from './live-data.mjs';
+import { fiaBulletins, liveNews } from './feeds.mjs';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const site = join(root, 'public');
+const sources = join(root, 'live');
+const cacheDir = join(root, '.live-cache');
+const snapshots = join(site, 'api', 'live');
+const now = Date.now();
+const order = (a, b) => b.startsAt - a.startsAt;
+const readText = async path => (await readFile(path, 'utf8')).replaceAll('\r\n', '\n');
+const writeJson = (path, data) => writeFile(path, `${JSON.stringify(data)}\n`);
+
+function replaceOnce(text, original, replacement, asset) {
+  const first = text.indexOf(original);
+  if (first === -1 || first !== text.lastIndexOf(original)) {
+    throw new Error(`The mirror's ${asset} integration point changed: ${original}`);
+  }
+  return text.slice(0, first) + replacement + text.slice(first + original.length);
+}
+
+async function installDashboard() {
+  const [index, app, locale, dashboard, translations] = await Promise.all([
+    ...['index.html', 'app.js', 'locale.js'].map(file => readText(join(site, file))),
+    ...['dashboard.html', 'translations.txt'].map(file => readText(join(sources, file))),
+  ]);
+  if (index.includes('id="live"') || app.includes('window.F1_LIVE')) {
+    throw new Error('The mirror already contains a live page. Rebuild the mirror before applying the dashboard.');
+  }
+
+  let html = index;
+  const addBefore = (anchor, insertion) => { html = replaceOnce(html, anchor, insertion + anchor, 'index.html'); };
+  const addAfter = (anchor, insertion) => { html = replaceOnce(html, anchor, anchor + insertion, 'index.html'); };
+  addAfter('  <link rel="stylesheet" href="./style.css">', '\n  <link rel="stylesheet" href="./live.css">');
+  addBefore('  <script defer src="./app.js"></script>', '  <script defer src="./live.js"></script>\n');
+  addBefore('      <a href="#/weekend" data-nav="weekend" class="nav-weekend">',
+    '      <a href="#/live" data-nav="live" class="nav-live">比赛实况</a>\n');
+  addAfter('        <a class="menu-group-title" href="#/trackside" data-nav="trackside">赛道上</a>',
+    '\n        <a href="#/live" data-nav="live">比赛实况</a>');
+  addBefore('          <a class="action hero-secondary" href="#/trackside">',
+    '          <a class="action hero-secondary" href="#/live">比赛实况</a>\n');
+  addAfter('<button class="action follow-button" id="weekendFollow" type="button"></button>',
+    '<a class="action outline" href="#/live">比赛实况</a>');
+  addBefore('  <section class="frame section page" id="weekend" data-page="weekend" hidden>', dashboard);
+
+  let routes = replaceOnce(app, 'weekend:"比赛周末",form:', 'weekend:"比赛周末",live:"比赛实况",form:', 'app.js');
+  routes = replaceOnce(routes, 'weekend:"race",form:', 'weekend:"race",live:"trackside",form:', 'app.js');
+  const routeSetup = '    selectedFromCalendar=undefined;\n';
+  routes = replaceOnce(routes, routeSetup, `${routeSetup}    if (previous==="live" && changed) window.F1_LIVE.hide();\n`, 'app.js');
+  routes = replaceOnce(routes, '      case "form":', '      case "live":\n        window.F1_LIVE.show(key);\n        break;\n      case "form":', 'app.js');
+  const localeAnchor = '比赛周末|Race Weekend\n';
+  const labels = replaceOnce(locale, localeAnchor, localeAnchor + translations, 'locale.js');
+
+  await Promise.all([
+    ...[['index.html', html], ['app.js', routes], ['locale.js', labels]].map(([file, content]) => writeFile(join(site, file), content)),
+    ...['live.js', 'live.css'].map(file => copyFile(join(sources, file), join(site, file))),
+  ]);
+}
+
+async function previousSnapshot() {
+  try {
+    return JSON.parse(await readFile(join(cacheDir, 'snapshots.json'), 'utf8'));
+  } catch (error) {
+    if (error.code !== 'ENOENT') console.warn(`Live snapshot cache unavailable: ${error.message}`);
+    return {};
+  }
+}
+
+async function buildSnapshots() {
+  const previous = await previousSnapshot();
+  const bundled = mirrorCalendar(await readText(join(site, 'data.js')));
+  const year = new Date(now).getUTCFullYear();
+  const years = new Date(now).getUTCMonth() < 2 ? [year, year - 1] : [year];
+  const online = (await Promise.all(years.map(async value => {
+    try { return await openCalendar(value); }
+    catch (error) { console.warn(`OpenF1 calendar ${value}: ${error.message}`); return []; }
+  }))).flat();
+  const coveredYears = new Set(online.map(session => new Date(session.startsAt).getUTCFullYear()));
+  const schedule = [...online, ...bundled.filter(session => !coveredYears.has(new Date(session.startsAt).getUTCFullYear()))].sort(order);
+
+  const stored = new Map(Object.entries(previous.archives ?? {}));
+  const knownSessions = new Map([...stored].map(([key, details]) => [key, details.session]));
+  for (const session of online) knownSessions.set(session.key, session);
+  const candidates = [...knownSessions.values()]
+    .filter(session => /^\d{1,8}$/.test(session.key) && session.endsAt + archiveDelay <= now).sort(order).slice(0, 10);
+  const onlineKeys = new Set(online.map(session => session.key));
+  const toFetch = candidates.filter(session => onlineKeys.has(session.key) && !stored.get(session.key)?.complete).slice(0, 4);
+  for (const session of toFetch) {
+    try {
+      const details = await archiveDetails(session);
+      const older = stored.get(session.key);
+      if (details.complete || (!older && (details.rows.length || details.events.length || details.radio.length))) {
+        stored.set(session.key, details);
+      }
+    } catch (error) {
+      console.warn(`Archive ${session.key} unavailable: ${error.message}`);
+    }
+  }
+  const archives = candidates.filter(session => stored.has(session.key));
+
+  const active = schedule.find(session => session.startsAt <= now && session.endsAt + archiveDelay > now);
+  const next = schedule.findLast(session => session.startsAt > now);
+  const last = schedule.find(session => session.endsAt + archiveDelay <= now);
+  const context = active ?? (next && next.startsAt - now < 3 * 86400_000 ? next : last ?? next);
+  const [news, bulletins] = await Promise.all([liveNews(context, now), fiaBulletins(context, schedule)]);
+  const sameContext = context?.startsAt === previous.contextStartsAt;
+  const index = {
+    generatedAt: now, schedule, archives, contextStartsAt: context?.startsAt,
+    news: sameContext && news.scope === 'unavailable' ? previous.news ?? news : news,
+    bulletins: sameContext && bulletins.unavailable ? previous.bulletins ?? bulletins : bulletins,
+  };
+  await Promise.all([mkdir(snapshots, { recursive: true }), mkdir(cacheDir, { recursive: true })]);
+  await Promise.all(archives.map(async session => {
+    const [news, bulletins] = await Promise.all([liveNews(session, now), fiaBulletins(session, schedule)]);
+    await writeJson(join(snapshots, `${session.key}.json`), { details: stored.get(session.key), news, bulletins });
+  }));
+  await writeJson(join(snapshots, 'index.json'), index);
+  const latest = Object.fromEntries(archives.map(session => [session.key, stored.get(session.key)]));
+  await writeJson(join(cacheDir, 'snapshots.json'), { ...index, archives: latest });
+  console.log(`Live centre ready: ${schedule.length} calendar entries, ${archives.length} archives, ${index.news.items.length} news items.`);
+}
+
+await installDashboard();
+await buildSnapshots();

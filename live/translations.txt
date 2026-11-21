@@ -1,0 +1,81 @@
+比赛实况|Live Centre
+F1 官方计时|Official F1 Live Timing
+正在读取实况|Loading live centre
+计时与赛况|Timing and track updates
+当前 / 最近场次|Current / latest session
+选择场次|Select session
+计时榜|Timing board
+赛况动态|Track updates
+赛会消息|Race control
+车队电台|Team radio
+播放车队电台|Play team radio
+打开原始录音|Open original recording
+这段录音暂时无法播放。|This recording cannot be played right now.
+F1 官方新闻|Official F1 news
+F1 官方赛况报道|Official F1 session coverage
+F1 官方精选电台|Official F1 radio highlights
+Formuradar 实况与电台|Formuradar live timing & radio
+Paddock Live 电台与转写|Paddock Live team radio & transcripts
+可在 Paddock Live 查看本场电台的文字转写。|See this session’s team radio transcripts on Paddock Live.
+免费实时计时|Free live timing
+TELOS 免费实时计时|TELOS free live timing
+计时与分段|Timing & sectors
+实时分段计时|Live sector timing
+左右滑动可查看完整分段。|Scroll sideways to see every sector column.
+赛道地图|Track map
+TELOS 赛道地图|TELOS track map
+车位按分段进度估算。|Car positions are estimated from sector progress.
+查看排位差距和淘汰区|View qualifying gaps and elimination zone
+TELOS 赛会即时消息|TELOS race control ticker
+新的赛会通知会在这里短暂显示。|New race control messages appear here briefly.
+查看完整赛会消息|Open full race control feed
+返回本站计时|Back to site timing
+公开计时|Public timing
+在 TELOS 打开|Open in TELOS
+场次以榜单标题为准。|The timing board header identifies the session.
+当前场次可用 TELOS 免费计时。|Free TELOS timing is available for the current session.
+新闻与公告|News & decisions
+资讯快照发布于|News snapshot published
+Autosport 文字直播|Autosport live text
+Motorsport.com 文字直播|Motorsport.com live text
+FIA 公告|FIA decisions
+暂无本站公告|No decisions for this Grand Prix yet
+FIA 公告暂不可用|FIA decisions temporarily unavailable
+电台仅收录来源发布的片段。|Radio is limited to clips released by the source.
+OpenF1 数据说明|OpenF1 data documentation
+排名|Position
+领先差|Gap to leader
+距前车|Interval
+上一圈|Last lap
+已完成场次|Completed session
+暂无计时数据|No timing data available
+暂无赛会消息|No race control messages
+赛会消息暂不可用|Race control messages are temporarily unavailable
+暂无已发布的电台录音|No radio clips have been released
+电台数据暂不可用|Radio data is temporarily unavailable
+暂无最新报道|No recent headlines
+新闻来源暂不可用|News feeds are temporarily unavailable
+本站相关报道|Reports about this Grand Prix
+近期 F1 报道|Recent F1 headlines
+下一场|Next session
+计划开赛|Scheduled start
+数据更新|Data updated
+北京时区|Beijing time
+实况更新中|Live updates
+赛程间歇|Between sessions
+等待计时信号|Waiting for timing data
+计时更新延迟|Timing feed delayed
+该场次已结束|Session ended
+计时源暂不可用|Timing feed temporarily unavailable
+已保留上次成功加载的数据。|Showing the last successfully loaded data.
+现场计时未接入|Live timing unavailable
+场次进行中|Session started
+场次结束|Session finished
+场次暂停|Session suspended
+安全车出动|Safety car deployed
+虚拟安全车|Virtual safety car
+赛道绿旗|Green flag
+赛道黄旗|Yellow flag
+赛道红旗|Red flag
+方格旗|Chequered flag
+双黄旗|Double yellow flag
