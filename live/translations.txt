@@ -1,0 +1,123 @@
+比赛实况|Live Centre
+F1 官方计时|Official F1 Live Timing
+正在读取实况|Loading live centre
+计时与赛况|Timing and track updates
+计时榜|Timing board
+赛况动态|Track updates
+赛会消息|Race control
+车队电台|Team radio
+播放车队电台|Play team radio
+打开原始录音|Open original recording
+这段录音暂时无法播放。|This recording cannot be played right now.
+F1 官方新闻|Official F1 news
+F1 官方赛况报道|Official F1 session coverage
+F1 官方精选电台|Official F1 radio highlights
+Formuradar 实况与电台|Formuradar live timing & radio
+Paddock Live 电台与转写|Paddock Live team radio & transcripts
+本场电台与文字转写的入口见底部备注。|The session radio and transcripts are linked in the notes below.
+TELOS 免费实时计时|TELOS free live timing
+实时分段计时|Live sector timing
+左右滑动可查看完整分段。|Scroll sideways to see every sector column.
+赛道地图|Track map
+TELOS 赛道地图|TELOS track map
+车位按分段进度估算。|Car positions are estimated from sector progress.
+查看排位差距和淘汰区|View qualifying gaps and elimination zone
+TELOS 赛会即时消息|TELOS race control ticker
+新的赛会通知会在这里短暂显示。|New race control messages appear here briefly.
+查看完整赛会消息|Open full race control feed
+在 TELOS 打开|Open in TELOS
+场次以榜单标题为准。|The timing board header identifies the session.
+新闻与公告|News & decisions
+资讯快照发布于|News snapshot published
+Autosport 文字直播|Autosport live text
+Motorsport.com 文字直播|Motorsport.com live text
+FIA 公告|FIA decisions
+暂无本站公告|No decisions for this Grand Prix yet
+FIA 公告暂不可用|FIA decisions temporarily unavailable
+电台仅收录来源发布的片段。|Radio is limited to clips released by the source.
+OpenF1 数据说明|OpenF1 data documentation
+排名|Position
+领先差|Gap to leader
+上一圈|Last lap
+暂无计时数据|No timing data available
+暂无赛会消息|No race control messages
+赛会消息暂不可用|Race control messages are temporarily unavailable
+暂无已发布的电台录音|No radio clips have been released
+电台数据暂不可用|Radio data is temporarily unavailable
+暂无最新报道|No recent headlines
+新闻来源暂不可用|News feeds are temporarily unavailable
+本站相关报道|Reports about this Grand Prix
+近期 F1 报道|Recent F1 headlines
+计划开赛|Scheduled start
+数据更新|Data updated
+北京时区|Beijing time
+赛中实况|Live session
+赛况确认中|Confirming session status
+最近一场 · 已结束|Latest session · Ended
+最近场次的计时快照正在同步。|Waiting for the latest session’s timing snapshot.
+等待开赛|Waiting for a session to start
+计时源暂不可用|Timing feed temporarily unavailable
+赛程更新暂不可用，按上次加载的赛程显示。|Schedule updates are unavailable. Showing the last loaded schedule.
+快照更新暂不可用，已保留本场上次加载的赛况。|Timing updates are unavailable. Showing the last saved snapshot for this session.
+场次进行中|Session started
+场次结束|Session finished
+场次暂停|Session suspended
+安全车出动|Safety car deployed
+虚拟安全车|Virtual safety car
+赛道绿旗|Green flag
+赛道黄旗|Yellow flag
+赛道红旗|Red flag
+方格旗|Chequered flag
+双黄旗|Double yellow flag
+数据来源与备用入口|Data sources and fallback links
+赛中计时和地图由 TELOS 更新。电台仅收录来源发布的片段。|TELOS updates the timing and map during sessions. Radio clips appear as their sources release them.
+全屏显示|Full screen
+退出全屏|Exit full screen
+等待赛道地图|Waiting for circuit map
+官方赛道布局|Official circuit layout
+查看抖音官方账号|View the official Douyin account
+打开官方原视频|Open original video
+查看 F1 官方原文|Read on Formula 1
+赛道状态和圈数|Track status and lap count
+实时计时与分段|Live timing and sector splits
+所列分段取自最快计时圈|Splits from the fastest recorded lap
+全场最快|Session best
+个人最快|Personal best
+慢于最佳|Slower than best
+维修区|Pit lane
+距前车|Interval
+进站|Pits
+车手详情|Driver detail
+领先车手|Race leader
+领先车手实时详情|Live race leader detail
+最快圈测速点|Fastest-lap speed trap
+轮胎使用圈数|Tyre age
+进站次数|Pit visits
+轮胎策略|Tyre strategy
+暂无车手分段和策略数据|Driver splits and strategy are unavailable
+赛道轮廓和弯角编号|Circuit outline and corner numbers
+轮廓与弯角|Layout and corners
+赛况流|Session feed
+筛选赛况流|Filter session feed
+新通知出现后会在这里短暂显示。|New notifications appear here briefly.
+本站资讯|This weekend
+排名第一|Session leader
+赛道温度|Track temperature
+有降雨|Rain
+无降雨|Dry
+气温|Air temperature
+湿度|Humidity
+风速|Wind
+安全车本圈进站|Safety car in this lap
+虚拟安全车即将结束|Virtual safety car ending
+维修区出口开放|Pit exit open
+维修区出口关闭|Pit exit closed
+DRS 已启用|DRS enabled
+DRS 已关闭|DRS disabled
+赛中计时、赛道状态和估算车位来自 TELOS，实时组件以计时源显示的场次为准。赛后圈速、轮胎、天气及已发布电台来自 OpenF1，赛道轮廓来自 Turn One。|TELOS provides live timing, track status and estimated positions. The widgets identify the session they are receiving. OpenF1 provides post-session laps, tyres, weather and published radio. Turn One provides the circuit outline.
+TELOS 实况组件|TELOS live widgets
+Turn One 赛道数据|Turn One circuit data
+F1Archive 电台档案|F1Archive radio archive
+最近进站|Last pit visit
+停站用时|Stationary time
+旗况|Track flag
