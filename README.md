@@ -21,6 +21,10 @@ python -m http.server 4175 --bind 127.0.0.1 --directory public
 - 赛后分段、小段、轮胎、进站、天气、赛会消息和已发布电台使用 OpenF1，Turn One 的公开赛道坐标在构建时缓存。新闻、FIA 公告和赛后快照随网站发布，GitHub Actions 每小时调度一次。OpenF1 暂停匿名访问时使用镜像赛程和已缓存的赛后数据。
 - GitHub Pages 部署由 `main` 的发布流程负责。实况页使用相对路径，支持仓库子路径下访问。
 
+## 赛道计时段
+
+- 赛道档案和比赛实况的赛道地图下显示 FIA 已核对的 S1、S2、S3 长度和计时线位置。分段数据及出处在 `content/circuit-sectors-2026.json`。
+
 ## 新闻和视频
 
 - 新闻构建补全近期报道的官方链接和可读摘要。重点报道可在 `content/news-notes.json` 补充双语要点。译文未就绪时显示原文，中文页面打开期间每五分钟检查新闻文件。

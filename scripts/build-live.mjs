@@ -37,7 +37,9 @@ async function installDashboard() {
   const addBefore = (anchor, insertion) => { html = replaceOnce(html, anchor, insertion + anchor, 'index.html'); };
   const addAfter = (anchor, insertion) => { html = replaceOnce(html, anchor, anchor + insertion, 'index.html'); };
   addAfter('  <link rel="stylesheet" href="./style.css">', '\n  <link rel="stylesheet" href="./live.css">');
-  addBefore('  <script defer src="./app.js"></script>', '  <script defer src="./live.js"></script>\n');
+  addAfter('  <link rel="stylesheet" href="./live.css">', '\n  <link rel="stylesheet" href="./circuit-sectors.css">');
+  addBefore('  <script defer src="./app.js"></script>',
+    '  <script defer src="./circuit-sectors.js"></script>\n  <script defer src="./live.js"></script>\n');
   addBefore('      <a href="#/weekend" data-nav="weekend" class="nav-weekend">',
     '      <a href="#/live" data-nav="live" class="nav-live">比赛实况</a>\n');
   addAfter('        <a class="menu-group-title" href="#/trackside" data-nav="trackside">赛道上</a>',
@@ -53,12 +55,15 @@ async function installDashboard() {
   const routeSetup = '    selectedFromCalendar=undefined;\n';
   routes = replaceOnce(routes, routeSetup, `${routeSetup}    if (previous==="live" && changed) window.F1_LIVE.hide();\n`, 'app.js');
   routes = replaceOnce(routes, '      case "form":', '      case "live":\n        window.F1_LIVE.show();\n        break;\n      case "form":', 'app.js');
+  const trackLink = '">查看本站场次</a></div></div>\'';
+  routes = replaceOnce(routes, trackLink + ';',
+    trackLink + ' + window.F1_CIRCUIT_SECTORS.render(k,{diagram:true});', 'app.js');
   const localeAnchor = '比赛周末|Race Weekend\n';
   const labels = replaceOnce(locale, localeAnchor, localeAnchor + translations, 'locale.js');
 
   await Promise.all([
     ...[['index.html', html], ['app.js', routes], ['locale.js', labels]].map(([file, content]) => writeFile(join(site, file), content)),
-    ...['live.js', 'live.css'].map(file => copyFile(join(sources, file), join(site, file))),
+    ...['live.js', 'live.css', 'circuit-sectors.js', 'circuit-sectors.css'].map(file => copyFile(join(sources, file), join(site, file))),
   ]);
 }
 
@@ -74,7 +79,7 @@ async function previousSnapshot() {
 async function versionAssets() {
   const index = join(site, 'index.html');
   let page = await readText(index);
-  for (const file of ['live.css', 'content-data.js', 'live.js', 'locale.js', 'video.js', 'app.js']) {
+  for (const file of ['live.css', 'circuit-sectors.css', 'content-data.js', 'circuit-sectors.js', 'live.js', 'locale.js', 'video.js', 'app.js']) {
     const hash = createHash('sha256').update(await readFile(join(site, file))).digest('hex').slice(0, 12);
     page = replaceOnce(page, `"./${file}"`, `"./${file}?v=${hash}"`, 'index.html');
   }

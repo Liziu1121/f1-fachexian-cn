@@ -130,7 +130,8 @@ function patchVideo(js, replace) {
     '',
   ].join('\n');
   js = replace(js, oldSources, sources);
-  js = replace(js, 'const hasBilibili=id=>id.startsWith("BV");', 'const hasBilibili=id=>/^BV\\w{10}$/.test(id);');
+  js = replace(js, 'const hasBilibili=id=>id.startsWith("BV");',
+    'const hasBilibili=id=>typeof id==="string"&&'+biliId+'.test(id);');
   js = replace(js, '...types[row[6]]', '...(types[row[6]]||types.featured)');
   js = replace(js, '\'<span class="video-duration">\'+duration+\'</span></span>\'', '(seconds>0?\'<span class="video-duration">\'+duration+\'</span>\':"")+\'</span>\'');
   js = replace(js, 'const category=types[type][0];', 'const category=(types[type]||types.featured)[english()?1:0];');
@@ -139,13 +140,27 @@ function patchVideo(js, replace) {
     'const source=qs("#videoSource").value;\n    const month=qs("#videoMonth").value;\n    const monthAt=new Intl.DateTimeFormat("en",{timeZone:"Asia/Shanghai",month:"2-digit"});\n    const terms');
   js = replace(js, '(!source||(source==="douyin"?Object.hasOwn(douyinSources,row[0]):hasBilibili(row[0])))&&',
     'matchesSource(row,source)&&(!month||monthAt.format(new Date(row[1]))===month)&&');
-  js = replace(js, 'qs("#videoList").innerHTML=items.length?',
-    'qs("#videoDouyinLink").hidden=source==="bilibili";\n    qs("#videoList").innerHTML=items.length?');
+  js = replace(js, 'qs("#videoList").innerHTML=items.length?', [
+    'qs("#videoDouyinCoverage").hidden=source==="bilibili";',
+    '    qs("#videoList").innerHTML=items.length?',
+  ].join('\n'));
+  js = js.replaceAll('all.length.toLocaleString()', 'all.filter(row=>matchesSource(row,source)).length.toLocaleString()');
   js = replace(js, 'signal:AbortSignal.timeout(10000)', 'signal:AbortSignal.timeout(10000),cache:"no-cache"');
   js = replace(js, 'if(!Array.isArray(result?.items)||!result.items.length)return;', 'if(!Array.isArray(result?.items))return;\n      lastRefresh=Date.now();\n      result.items=result.items.filter(row=>hasBilibili(row[0]));\n      if(!result.items.length)return;');
   js = replace(js, '      insert(result.items);\n      lastRefresh=Date.now();', '      insert(result.items);');
-  js = replace(js, '    const swap=qs("#videoSwitch");',
-    '    qs("#videoOriginal").href=douyin?"https://www.douyin.com/video/"+douyinSources[playing[0]].id:"https://www.bilibili.com/video/"+playing[0]+"/";\n    const swap=qs("#videoSwitch");');
+  const platformSwitch = [
+    '    const swap=qs("#videoSwitch");',
+    '    swap.hidden=!douyinSources[playing[0]]||!hasBilibili(playing[0]);',
+    '    swap.textContent=douyin?(en?"Play on Bilibili":"切换哔哩哔哩"):(en?"Play on Douyin":"切换抖音");',
+  ].join('\n');
+  js = replace(js, platformSwitch,
+    '    qs("#videoOriginal").href=douyin?"https://www.douyin.com/video/"+douyinSources[playing[0]].id:"https://www.bilibili.com/video/"+playing[0]+"/";');
+  js = replace(js, [
+    '  qs("#videoSwitch").addEventListener("click",()=>{',
+    '    playerSource=playerSource==="douyin"?"bilibili":"douyin";',
+    '    loadPlayer();',
+    '  });\n',
+  ].join('\n'), '');
   js = replace(js, '  for(const [id,event] of [["videoSeason","change"]', [
     '  function drawMonths() {',
     '    const select=qs("#videoMonth"), month=select.value;',
@@ -171,8 +186,12 @@ function patchIndex(index, profile, replace) {
   const sourceField = '        <label>片源<select id="videoSource"><option value="">全部片源</option><option value="douyin">抖音</option><option value="bilibili">哔哩哔哩</option></select></label>';
   index = replace(index, sourceField, sourceField +
     '\n        <label>月份<select id="videoMonth"><option value="">全部月份</option></select></label>');
-  index = replace(index, '      <p id="videoCount" class="sub" role="status"></p>',
-    '      <a class="text-link video-official-link" id="videoDouyinLink" href="'+profile+'" target="_blank" rel="noopener noreferrer">查看抖音官方账号</a>\n      <p id="videoCount" class="sub" role="status"></p>');
+  index = replace(index, '      <p id="videoCount" class="sub" role="status"></p>', [
+    '      <p class="sub" id="videoDouyinCoverage"><span>抖音档案收录已核对的 2026 年官号作品，尚未收齐。</span>',
+    '        <a class="text-link video-official-link" href="'+profile+'" target="_blank" rel="noopener noreferrer">查看抖音官方账号</a></p>',
+    '      <p id="videoCount" class="sub" role="status"></p>',
+  ].join('\n'));
+  index = replace(index, '          <button class="action" type="button" id="videoSwitch" hidden></button>\n', '');
   return replace(index, '          <button class="action" type="button" id="videoRetry">',
     '          <a class="action" id="videoOriginal" target="_blank" rel="noopener noreferrer">打开官方原视频</a>\n          <button class="action" type="button" id="videoRetry">');
 }
@@ -186,6 +205,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   douyin.items = [...new Map(douyin.items.filter(item => /^\d{19}$/.test(item.id)
     && Date.parse(item.stamp) >= Date.parse('2026-01-01T00:00:00+08:00')
     && Date.parse(item.stamp) < Date.parse('2027-01-01T00:00:00+08:00')).map(item => [item.id, item])).values()];
+  const sectors = JSON.parse(await readFile(join(root, 'content', 'circuit-sectors-2026.json'), 'utf8'));
   await mkdir(cacheDir, { recursive: true });
   const [feed] = await Promise.all([buildNews(site, cacheDir, notes), buildVideos(site, cacheDir)]);
   const patch = async (asset, transform) => {
@@ -197,7 +217,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
     patch('app.js', patchNews),
     patch('video.js', patchVideo),
     patch('index.html', (html, replace) => patchIndex(html, douyin.profile, replace)),
-    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, feed, notes }) + ';\n'),
+    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, feed, notes, sectors }) + ';\n'),
   ]);
   console.log('Content ready: ' + feed.items.length + ' recent news items, ' + douyin.items.length + ' verified Douyin videos.');
   return feed;

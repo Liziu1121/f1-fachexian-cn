@@ -341,6 +341,10 @@
     if (showCircuit && circuitChanged) paintCircuit();
     const map = byId('liveTrackLayout');
     const course = sessionCircuit(session)?.[0];
+    const season = new Date(session?.startsAt).getUTCFullYear();
+    const sectors = season === 2026 ? window.F1_CIRCUIT_SECTORS.render(course) : '';
+    setMarkup('liveCircuitSectors', sectors);
+    byId('liveCircuitSectors').hidden = !sectors;
     const code = course && content.circuit[course]?.[3];
     const url = !showPublic && !showCircuit && code ? `https://media.formula1.com/image/upload/c_fit,h_704/q_auto/v1740000001/common/f1/2026/track/2026track${code}detailed.webp` : '';
     byId('liveMapWindow').hidden = !showPublic;

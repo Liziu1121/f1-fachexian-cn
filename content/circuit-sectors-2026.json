@@ -1,0 +1,77 @@
+{
+  "australia": {
+    "lengths": [1.753, 1.413, 2.112],
+    "lines": [[120, 6, "before"], [140, 9, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_melbourne_event_-_circuit_map_-_melbourne_2026_0.pdf"
+  },
+  "china": {
+    "lengths": [1.430, 1.569, 2.452],
+    "lines": [[150, 6, "before"], [145, 11, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_chinese_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_battery_containment_area_and_red_zone.pdf"
+  },
+  "japan": {
+    "lengths": [2.184, 2.526, 1.097],
+    "lines": [[110, 8, "before"], [270, 15, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_japanese_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_battery_containment_area_and_red_zone.pdf"
+  },
+  "canada": {
+    "lengths": [1.092, 1.396, 1.873],
+    "lines": [[150, 6, "before"], [190, 10, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_canadian_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_and_emergency_exits_map.pdf"
+  },
+  "monaco": {
+    "lengths": [1.051, 1.419, 0.867],
+    "lines": [[60, 5, "before"], [70, 13, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_monaco_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_and_red_zone.pdf"
+  },
+  "barcelona-catalunya": {
+    "lengths": [1.619, 1.765, 1.273],
+    "lines": [[50, 4, "before"], [90, 10, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_barcelona_event_-_circuit_map_-_barcelona_2026.pdf"
+  },
+  "great-britain": {
+    "lengths": [1.823, 2.464, 1.604],
+    "lines": [[110, 6, "before"], [50, 14, "after"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_british_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_and_red_zone.pdf"
+  },
+  "las-vegas": {
+    "lengths": [1.693, 1.735, 2.773],
+    "lines": [[90, 5, "after"], [170, 12, "after"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_las_vegas_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_and_red_zone.pdf"
+  },
+  "miami": {
+    "lengths": [1.866, 1.730, 1.816],
+    "lines": [[110, 8, "after"], [70, 16, "after"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_miami_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_and_red_zone.pdf"
+  },
+  "austria": {
+    "lengths": [1.215, 1.697, 1.414],
+    "lines": [[170, 3, "before"], [60, 7, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_austrian_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_and_red_zone.pdf"
+  },
+  "belgium": {
+    "lengths": [2.254, 2.820, 1.930],
+    "lines": [[150, 5, "before"], [50, 15, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_belgian_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_and_red_zone.pdf"
+  },
+  "hungary": {
+    "lengths": [1.736, 1.542, 1.103],
+    "lines": [[85, 4, "before"], [100, 11, "after"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_hungarian_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_and_red_zone.pdf"
+  },
+  "italy": {
+    "lengths": [1.909, 1.823, 2.061],
+    "lines": [[230, 4, "before"], [210, 8, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_italian_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_and_red_zone.pdf"
+  },
+  "azerbaijan": {
+    "lengths": [2.033, 2.025, 1.945],
+    "lines": [[45, 5, "before"], [55, 16, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_azerbaijan_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_and_red_zone.pdf"
+  },
+  "brazil": {
+    "lengths": [1.236, 1.943, 1.130],
+    "lines": [[170, 4, "before"], [85, 12, "before"]],
+    "source": "https://www.fia.com/system/files/decision-document/2026_sao_paulo_grand_prix_-_competition_notes_-_circuit_map_pit_lane_drawing_emergency_exits_map_and_red_zone.pdf"
+  }
+}
