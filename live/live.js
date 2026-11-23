@@ -9,14 +9,15 @@
   const refreshButton = byId('liveRefresh');
   const timingFrame = byId('liveTimingFrame');
   const statusFrame = byId('liveStatusFrame');
-  const mapFrame = byId('liveMapFrame');
   const driverFrame = byId('liveDriverFrame');
   const controlFrame = byId('liveControlFrame');
-  const circuitCanvas = byId('liveCircuit');
-  const mapSourceSize = 420;
-  new ResizeObserver(([entry]) => {
-    if (entry.contentRect.width) mapFrame.style.zoom = String(Math.min(entry.contentRect.width, 330) / mapSourceSize);
-  }).observe(byId('liveMapWindow'));
+  const map = byId('liveTrackLayout');
+  const mapOpen = byId('liveMapOpen');
+  const mapDialog = byId('liveMapDialog');
+  const mapViewer = byId('liveMapViewer');
+  const zoomImage = byId('liveMapZoomImage');
+  let mapZoom = 1;
+  let mapDrag;
   new ResizeObserver(([entry]) => {
     if (entry.contentRect.width) driverFrame.style.zoom = String(Math.min(entry.contentRect.width, 330) / 360);
   }).observe(byId('liveDriverWindow'));
@@ -39,11 +40,9 @@
   let snapshot;
   let recording;
   let driverFocus;
-  let circuit;
   let timelineFilter = 'all';
   const archiveDelay = 30 * 60_000;
   const compounds = { SOFT: ['S', '软胎'], MEDIUM: ['M', '中性胎'], HARD: ['H', '硬胎'], INTERMEDIATE: ['I', '半雨胎'], WET: ['W', '全雨胎'] };
-  new ResizeObserver(paintCircuit).observe(circuitCanvas);
 
   function setMarkup(id, value) {
     const node = byId(id);
@@ -281,90 +280,109 @@
     showFrame(statusFrame, isLive);
   }
 
-  function paintCircuit() {
-    const width = circuitCanvas.clientWidth;
-    const height = circuitCanvas.clientHeight;
-    if (!circuit || !width || !height) return;
-    const scaleFactor = Math.min(window.devicePixelRatio || 1, 2);
-    circuitCanvas.width = Math.round(width * scaleFactor);
-    circuitCanvas.height = Math.round(height * scaleFactor);
-    const context = circuitCanvas.getContext('2d');
-    if (!context) return;
-    context.scale(scaleFactor, scaleFactor);
-    const angle = circuit.rotation * Math.PI / 180;
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    const rotate = (x, y) => [x * cos - y * sin, -(x * sin + y * cos)];
-    const points = circuit.x.map((x, i) => rotate(x, circuit.y[i]));
-    const xs = points.map(point => point[0]);
-    const ys = points.map(point => point[1]);
-    const left = Math.min(...xs), right = Math.max(...xs);
-    const top = Math.min(...ys), bottom = Math.max(...ys);
-    const scale = Math.min((width - 46) / Math.max(right - left, 1), (height - 52) / Math.max(bottom - top, 1));
-    const project = ([x, y]) => [(x - (left + right) / 2) * scale + width / 2, (y - (top + bottom) / 2) * scale + height / 2];
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
-    context.beginPath();
-    points.forEach((point, i) => {
-      const [x, y] = project(point);
-      if (i === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    });
-    context.closePath();
-    for (const [lineWidth, color] of [[11, '#25394a'], [6, '#57616b'], [3, '#f3c172']]) {
-      context.lineWidth = lineWidth;
-      context.strokeStyle = color;
-      context.stroke();
-    }
-    context.font = '600 10px ui-monospace, monospace';
-    context.textBaseline = 'middle';
-    context.textAlign = 'center';
-    for (const corner of circuit.corners ?? []) {
-      const [x, y] = project(rotate(corner.x, corner.y));
-      const dx = x - width / 2;
-      const dy = y - height / 2;
-      const length = Math.hypot(dx, dy) || 1;
-      context.beginPath();
-      context.fillStyle = '#a7eee0';
-      context.arc(x, y, 2.3, 0, 2 * Math.PI);
-      context.fill();
-      context.fillStyle = '#d5e3f1';
-      context.fillText(corner.label, x + dx / length * 11, y + dy / length * 11);
-    }
+  function resizeMap(zoom = mapZoom, keepCenter = true) {
+    if (!mapDialog.open || !zoomImage.naturalWidth) return;
+    const width = mapViewer.clientWidth;
+    const height = mapViewer.clientHeight;
+    if (!width || !height) return;
+    const viewport = mapViewer.getBoundingClientRect();
+    const image = zoomImage.getBoundingClientRect();
+    const centerX = (viewport.left + width / 2 - image.left) / (image.width || 1);
+    const centerY = (viewport.top + height / 2 - image.top) / (image.height || 1);
+    const fit = Math.min((width - 32) / zoomImage.naturalWidth, (height - 32) / zoomImage.naturalHeight, 1);
+    mapZoom = Math.max(1, Math.min(4, zoom));
+    zoomImage.style.width = `${Math.round(zoomImage.naturalWidth * fit * mapZoom)}px`;
+    zoomImage.style.height = `${Math.round(zoomImage.naturalHeight * fit * mapZoom)}px`;
+    mapViewer.scrollLeft = keepCenter ? centerX * zoomImage.width - width / 2 : 0;
+    mapViewer.scrollTop = keepCenter ? centerY * zoomImage.height - height / 2 : 0;
+    byId('liveMapZoomLevel').textContent = `${Math.round(mapZoom * 100)}%`;
+    byId('liveMapZoomOut').disabled = mapZoom <= 1;
+    byId('liveMapZoomIn').disabled = mapZoom >= 4;
   }
 
-  function drawMap(showPublic, session, layout) {
-    const showCircuit = !showPublic && Boolean(layout?.x.length);
-    const circuitChanged = circuit !== layout;
-    circuit = layout;
-    byId('liveCircuitFrame').hidden = !showCircuit;
-    if (showCircuit && circuitChanged) paintCircuit();
-    const map = byId('liveTrackLayout');
+  new ResizeObserver(() => resizeMap()).observe(mapViewer);
+  zoomImage.addEventListener('load', () => resizeMap(1, false));
+  mapOpen.addEventListener('click', () => {
+    if (!map.getAttribute('src') || !map.naturalWidth) return;
+    zoomImage.src = map.src;
+    zoomImage.alt = map.alt;
+    mapDialog.showModal();
+    resizeMap(1, false);
+  });
+  byId('liveMapClose').addEventListener('click', () => mapDialog.close());
+  byId('liveMapZoomIn').addEventListener('click', () => resizeMap(mapZoom + .5));
+  byId('liveMapZoomOut').addEventListener('click', () => resizeMap(mapZoom - .5));
+  byId('liveMapFit').addEventListener('click', () => resizeMap(1, false));
+  mapDialog.addEventListener('click', event => { if (event.target === mapDialog) mapDialog.close(); });
+  mapViewer.addEventListener('pointerdown', event => {
+    if (event.pointerType === 'touch' || event.button !== 0) return;
+    mapDrag = { x: event.clientX, y: event.clientY, left: mapViewer.scrollLeft, top: mapViewer.scrollTop };
+    mapViewer.setPointerCapture(event.pointerId);
+    mapViewer.setAttribute('data-dragging', '');
+    event.preventDefault();
+  });
+  mapViewer.addEventListener('pointermove', event => {
+    if (!mapDrag) return;
+    mapViewer.scrollLeft = mapDrag.left + mapDrag.x - event.clientX;
+    mapViewer.scrollTop = mapDrag.top + mapDrag.y - event.clientY;
+  });
+  function stopMapDrag() {
+    mapDrag = null;
+    mapViewer.removeAttribute('data-dragging');
+  }
+  mapViewer.addEventListener('pointerup', stopMapDrag);
+  mapViewer.addEventListener('pointercancel', stopMapDrag);
+  mapDialog.addEventListener('close', stopMapDrag);
+  map.addEventListener('load', () => {
+    map.hidden = false;
+    mapOpen.disabled = false;
+    byId('liveMapStatus').hidden = true;
+  });
+  map.addEventListener('error', () => {
+    mapOpen.hidden = true;
+    map.removeAttribute('src');
+    byId('liveMapStatus').hidden = false;
+    setText('liveMapStatus', '官方赛道图暂不可用');
+  });
+
+  function drawMap(session) {
     const course = sessionCircuit(session)?.[0];
     const season = new Date(session?.startsAt).getUTCFullYear();
     const sectors = season === 2026 ? window.F1_CIRCUIT_SECTORS.render(course) : '';
     setMarkup('liveCircuitSectors', sectors);
     byId('liveCircuitSectors').hidden = !sectors;
     const code = course && content.circuit[course]?.[3];
-    const url = !showPublic && !showCircuit && code ? `https://media.formula1.com/image/upload/c_fit,h_704/q_auto/v1740000001/common/f1/2026/track/2026track${code}detailed.webp` : '';
-    byId('liveMapWindow').hidden = !showPublic;
-    showFrame(mapFrame, showPublic);
-    if (url && map.getAttribute('src') !== url) {
-      map.hidden = false;
-      map.src = url;
-    } else if (!url) {
-      map.hidden = true;
-      map.removeAttribute('src');
+    const url = code ? `https://media.formula1.com/image/upload/c_fit,w_2400/q_auto/common/f1/${season}/track/${season}track${code}detailed.webp` : '';
+    setText('liveMapCaption', url ? 'F1 官方赛道图' : '');
+    if (url) {
+      map.alt = `${sessionLabel(session)} · ${english() ? 'F1 official circuit map' : 'F1 官方赛道图'}`;
+      setText('liveMapDialogTitle', map.alt);
+      zoomImage.alt = map.alt;
     }
-    byId('liveMapStatus').hidden = showPublic || showCircuit || !map.hidden;
-    setText('liveMapCaption', showPublic ? '车位按分段进度估算。' : showCircuit ? '轮廓与弯角' : map.hidden ? '' : '官方赛道布局');
+    if (url && map.getAttribute('src') !== url) {
+      map.hidden = true;
+      mapOpen.hidden = false;
+      mapOpen.disabled = true;
+      byId('liveMapOriginal').href = url;
+      byId('liveMapStatus').hidden = false;
+      setText('liveMapStatus', '正在加载官方赛道图');
+      map.src = url;
+      if (mapDialog.open) zoomImage.src = url;
+    } else if (!url) {
+      mapOpen.hidden = true;
+      map.removeAttribute('src');
+      byId('liveMapOriginal').removeAttribute('href');
+      if (mapDialog.open) mapDialog.close();
+      byId('liveMapStatus').hidden = false;
+      setText('liveMapStatus', session ? '官方赛道图暂不可用' : '等待赛道地图');
+    }
   }
 
   function draw() {
-    const { session, mode, details, news, bulletins, layout, generatedAt, scheduleUnavailable, archiveUnavailable } = snapshot ?? {};
+    const { session, mode, details, news, bulletins, generatedAt, scheduleUnavailable, archiveUnavailable } = snapshot ?? {};
     const isLive = mode === 'live' || mode === 'settling';
     drawLiveFrames(isLive);
-    drawMap(isLive, session, layout);
+    drawMap(session);
     byId('liveQualifyingDetails').hidden = !isLive || !/qualifying|shootout/i.test(session.name);
     setText('liveState', states[mode] ?? '正在读取实况');
     byId('liveState').dataset.state = mode ?? 'loading';
@@ -448,10 +466,8 @@
     const context = [...index.schedule, ...index.archives].find(candidate => candidate.startsAt === index.contextStartsAt);
     const sameContext = sameSession(context, session);
     const sameWeekend = sameContext || (session?.meeting != null && session.meeting === context?.meeting);
-    const circuitKey = session?.circuitKey ?? saved?.details.session.circuitKey;
-    const layout = circuitKey && index.layouts?.[`${new Date(session.startsAt).getUTCFullYear()}-${circuitKey}`];
     return {
-      index, session, mode, saved, details: saved?.details, layout, pollMs,
+      index, session, mode, saved, details: saved?.details, pollMs,
       generatedAt: index.generatedAt,
       scheduleUnavailable: !loaded,
       archiveUnavailable: Boolean(archive && !validArchive),
@@ -499,7 +515,7 @@
     request = null;
     refreshButton.removeAttribute('aria-busy');
     drawLiveFrames(false);
-    showFrame(mapFrame, false);
+    if (mapDialog.open) mapDialog.close();
     showFrame(controlFrame, false);
     showFrame(driverFrame, false);
     if (screen.hasAttribute('data-focus')) {
@@ -540,14 +556,10 @@
   });
   document.addEventListener('fullscreenchange', updateFullscreen);
   document.addEventListener('keydown', event => {
-    if (event.key !== 'Escape' || !screen.hasAttribute('data-focus')) return;
+    if (mapDialog.open || event.key !== 'Escape' || !screen.hasAttribute('data-focus')) return;
     screen.removeAttribute('data-focus');
     updateFullscreen();
     fullscreen.focus({ preventScroll: true });
-  });
-  byId('liveTrackLayout').addEventListener('error', event => {
-    event.target.hidden = true;
-    byId('liveMapStatus').hidden = false;
   });
   function setTimelineFilter(filter) {
     timelineFilter = filter;

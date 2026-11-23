@@ -114,11 +114,23 @@ OpenF1 数据说明|OpenF1 data documentation
 维修区出口关闭|Pit exit closed
 DRS 已启用|DRS enabled
 DRS 已关闭|DRS disabled
-赛中计时、赛道状态和估算车位来自 TELOS，实时组件以计时源显示的场次为准。赛后圈速、轮胎、天气及已发布电台来自 OpenF1，赛道轮廓来自 Turn One。|TELOS provides live timing, track status and estimated positions. The widgets identify the session they are receiving. OpenF1 provides post-session laps, tyres, weather and published radio. Turn One provides the circuit outline.
+赛中计时和赛道状态来自 TELOS，实时组件以计时源显示的场次为准。赛后圈速、轮胎、天气及已发布电台来自 OpenF1，赛道图来自 F1 官网。|TELOS provides live timing and track status. The widgets identify the session they are receiving. OpenF1 provides post-session laps, tyres, weather and published radio. Circuit maps come from the official F1 website.
 TELOS 实况组件|TELOS live widgets
-Turn One 赛道数据|Turn One circuit data
 F1Archive 电台档案|F1Archive radio archive
 最近进站|Last pit visit
 停站用时|Stationary time
 旗况|Track flag
 抖音档案收录已核对的 2026 年官号作品，尚未收齐。|The Douyin archive contains verified official posts from 2026. Coverage is incomplete.
+F1 官方赛道图|F1 official circuit map
+放大查看官方赛道图|Enlarge official circuit map
+放大查看|Enlarge map
+关闭|Close
+赛道图缩放|Circuit map zoom
+缩小赛道图|Zoom out of circuit map
+放大赛道图|Zoom into circuit map
+适应窗口|Fit to window
+打开官方原图|Open official image
+放大后可拖动或滚动查看弯角和分段细节。|After zooming in, drag or scroll to inspect corners and sector details.
+可缩放的官方赛道图|Zoomable official circuit map
+官方赛道图暂不可用|Official circuit map unavailable
+正在加载官方赛道图|Loading official circuit map

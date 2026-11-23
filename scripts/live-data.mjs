@@ -53,27 +53,6 @@ export function mirrorCalendar(data) {
   });
 }
 
-export function circuitLayoutKey(session) {
-  if (!Number.isInteger(session?.circuitKey) || session.circuitKey <= 0) return '';
-  return `${new Date(session.startsAt).getUTCFullYear()}-${session.circuitKey}`;
-}
-
-export async function circuitLayout(session) {
-  const year = new Date(session.startsAt).getUTCFullYear();
-  const url = new URL(`https://api.t1f1.com/api/static/circuits/${session.circuitKey}/data`);
-  url.searchParams.set('year', year);
-  const { data } = await request(url).then(response => response.json());
-  const { x, y } = data?.track_outline ?? {};
-  if (Number(data?.year) !== year || Number(data.circuit_id) !== session.circuitKey ||
-      !Array.isArray(x) || !Array.isArray(y) || x.length !== y.length || x.length < 3 || x.length > 12_000 ||
-      !x.every(Number.isFinite) || !y.every(Number.isFinite)) return null;
-  const corners = (data.corners ?? []).flatMap(({ number, position, letter }) => {
-    if (!Number.isInteger(number) || !Number.isFinite(position?.x) || !Number.isFinite(position.y)) return [];
-    return [{ x: position.x, y: position.y, label: `${number}${letter ?? ''}` }];
-  });
-  return { x: x.map(Math.round), y: y.map(Math.round), corners, rotation: Number(data.rotation) || 0 };
-}
-
 function lapSummary(laps) {
   const summary = new Map();
   for (const lap of laps) {
