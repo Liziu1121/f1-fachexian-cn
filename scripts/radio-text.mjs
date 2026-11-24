@@ -56,7 +56,10 @@ export async function populateRadioText({ clips, cacheDir, root }) {
         await writeFile(output, '');
         await writeFile(queue, JSON.stringify(pending.map(clip => ({ key: key(clip), url: clip.url }))));
         await run(python, [join(root, 'scripts', 'transcribe-radio.py'), queue, output, join(cacheDir, 'radio-models')],
-          { timeout: 185_000 }).catch(error => console.warn(`Radio transcription: ${error.message.slice(0, 240)}`));
+          { timeout: 230_000 }).catch(error => {
+            const diagnostic = error.stderr?.trim().split('\n').slice(-5).join(' | ');
+            console.warn(`Radio transcription: ${diagnostic || error.signal || error.message}`);
+          });
         for (const line of (await readFile(output, 'utf8')).trim().split('\n').filter(Boolean)) {
           const { url, source, text, language } = JSON.parse(line);
           entries[url] = text && language ? { text, language } : { source, attempted: now };
