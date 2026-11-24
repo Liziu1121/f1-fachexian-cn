@@ -3,17 +3,6 @@ export function patchNews(js, replace) {
   edit('  const newsReports=window.F1_NEWS_REPORTS;',
     '  const newsExtras=window.F1_CONTENT_EXTRAS;\n  const newsReports=window.F1_NEWS_REPORTS;');
   edit('return Boolean(newsReports[article.id]', 'return Boolean(newsExtras.notes[article.id]?.body?.length||newsReports[article.id]');
-  edit('  function newsText(article,en=window.F1_LOCALE.english()) {',
-    '  function originalNewsUrl(article) {\n'+
-    '    const value=article.sourceUrl||article.url||(/^[A-Za-z0-9]{16,24}$/.test(article.id)?"https://www.formula1.com/en/latest/article/news."+article.id:"");\n'+
-    '    try {\n'+
-    '      const url=new URL(value);\n'+
-    '      if(url.protocol==="https:"&&["www.skysports.com","www.motorsport.com","www.autosport.com"].includes(url.hostname)) return url.href;\n'+
-    '      if(url.origin==="https://www.formula1.com"&&url.pathname.startsWith("/en/latest/")) return url.href;\n'+
-    '    } catch {}\n'+
-    '    return "";\n'+
-    '  }\n\n'+
-    '  function newsText(article,en=window.F1_LOCALE.english()) {');
   const oldText = '    if (en) return {title:article.titleEn||article.en?.[0]||article.title,summary:article.summaryEn||article.en?.[1]||article.summary};\n'+
     '    return {\n'+
     '      title:isChineseNewsText(article.title)?article.title:"中文标题待更新",\n'+
@@ -93,21 +82,6 @@ export function patchNews(js, replace) {
   edit('season tickets?|betting|bets|F1 Academy', 'season tickets?|betting|bet builder|bets|F1 Academy');
   edit('item.image&&Date.parse(item.stamp)<=now+300000&&\n        (en||isChineseNewsText(item.title))&&!promoOrOtherSeries.test',
     '(item.title||item.titleEn)&&Date.parse(item.stamp)<=now+300000&&\n        !promoOrOtherSeries.test');
-  edit('const paragraphs=en&&article.en?.length>2?article.en.slice(2):article.body||[];\n      const intro=summary||title;',
-    'const note=newsExtras.notes[article.id];\n'+
-    '      const paragraphs=(en?note?.bodyEn:note?.body)||(en&&article.en?.length>2?article.en.slice(2):article.body||[]);\n'+
-    '      const original=originalNewsUrl(article);\n'+
-    '      const lang=value=>isChineseNewsText(value)?"zh-CN":"en";\n'+
-    '      const intro=summary?\'<p class="news-intro" lang="\'+lang(summary)+\'">\'+safe(summary)+\'</p>\':"";');
-  edit('const sectionName=hasNewsBody(article)?(en?"Report":"报道正文"):(en?"Archive brief":"档案简讯");',
-    'const sectionName=hasNewsBody(article)?(en?"Report":"报道正文"):(en?"Article summary":"报道摘要");\n'+
-    '      const source=original?\'<a class="action outline" target="_blank" rel="noopener noreferrer" href="\'+safe(original)+\'">\'+(en?"Read on Formula 1":"查看 F1 官方原文")+\'</a>\':"";\n'+
-    '      const unavailable=intro||body||results?"":\'<p class="news-intro">\'+(en?"The publisher has not provided a summary.":"来源暂未提供摘要。")+\'</p>\';');
-  edit('\' · \'+safe(newsDate(article))+\' · 北京时间</div><h1 class="page-title" tabindex="-1">\'+safe(title)',
-    '\' · \'+safe(newsDate(article))+\' · 北京时间</div><h1 class="page-title" tabindex="-1" lang="\'+lang(title)+\'">\'+safe(title)');
-  edit('\'<p class="news-intro">\'+safe(intro)+\'</p>\'+body+', 'intro+unavailable+body+');
-  edit('\'<div class="switcher">\'+link+\'<span class="sub">\'+(en?"Source · Formula 1":"资料来源 · F1 官网")+\'</span></div></div>\'',
-    '\'<div class="switcher">\'+link+source+\'</div></div>\'');
   edit('  if (canUseServer) setInterval(()=>{if(currentPage==="news"&&!document.hidden) refreshNewsArchive();},300000);',
     '  if (canUseServer) {\n'+
     '    const refreshVisibleNews=()=>{if(currentPage==="news"&&!document.hidden) refreshNewsArchive();};\n'+
@@ -120,16 +94,30 @@ export function patchNews(js, replace) {
   const cardStart = js.indexOf('  function newsCard(');
   const archiveStart = js.indexOf('  function drawNewsArchive(', cardStart);
   if (cardStart < 0 || archiveStart < 0) throw new Error('News cards integration point unavailable');
-  js = js.slice(0, cardStart) + `  function newsCard(item,lead=false,cover=false) {
-    const original=originalNewsUrl(item);
-    const href=safe(original||route("news",item.id));
-    const external=original?' target="_blank" rel="noopener noreferrer"':'';
+  js = js.slice(0, cardStart) + `  function newsBody(article,en) {
+    const note=newsExtras.notes[article.id];
+    const full=en ? note?.fullTextEn : note?.fullTextZh;
+    if (full?.length) return full.map(paragraph=>'<p>'+safe(paragraph)+'</p>').join("");
+    const sections=newsReports[article.id];
+    const paragraphs=(en?note?.bodyEn:note?.body)||(en&&article.en?.length>2?article.en.slice(2):article.body||[]);
+    const content=sections?.length ? sections.map(([heading,zh,english])=>'<section class="news-section">'+
+      (en||!heading?"":'<h2>'+safe(heading)+'</h2>')+'<p>'+safe(en?english:zh)+'</p></section>').join("")
+      :paragraphs.map(paragraph=>'<p>'+safe(paragraph)+'</p>').join("");
+    if (!content) return "";
+    const {summary}=newsText(article,en);
+    return (summary?'<p class="news-intro">'+safe(summary)+'</p>':"")+content;
+  }
+
+  function newsCard(item,lead=false,cover=false) {
     const {title}=newsText(item);
-    const label=window.F1_LOCALE.english()?"Read full report":"阅读完整报道";
+    const en=window.F1_LOCALE.english();
+    const available=Boolean(newsBody(item,en));
+    const label=available?(en?"Read on this site":"站内阅读"):(en?"Full text unavailable":"暂无站内全文");
     return '<article class="news-card'+(lead?' news-lead':'')+'">'+
-      (cover&&item.image?'<a class="news-visual" href="'+href+'"'+external+' tabindex="-1" aria-hidden="true">'+newsCover(item,lead?1100:700,!lead)+'</a>':'')+
-      '<div class="news-card-copy"><div class="race-kicker">'+safe(item.source||"F1")+" · "+safe(newsDate(item))+'</div><h2><a href="'+href+'"'+external+'>'+safe(title)+'</a></h2>'+
-      '<a class="text-link" href="'+href+'"'+external+'>'+label+'</a></div></article>';
+      (cover&&item.image?'<div class="news-visual">'+newsCover(item,lead?1100:700,!lead)+'</div>':'')+
+      '<div class="news-card-copy"><div class="race-kicker">'+safe(item.source||"F1")+" · "+safe(newsDate(item))+'</div><h2>'+
+      '<button class="news-title-button" type="button" data-news-entry="'+safe(item.id)+'">'+safe(title)+'</button></h2>'+
+      '<span class="sub">'+label+'</span></div></article>';
   }
 
 ` + js.slice(archiveStart);
@@ -140,16 +128,29 @@ export function patchNews(js, replace) {
   const detailEnd = js.indexOf('    qs("#newsSpotlight").innerHTML=', detailStart);
   if (detailStart < 0 || detailEnd < 0) throw new Error('News detail integration point unavailable');
   js = js.slice(0, detailStart) + `    if(article){
-      const {title}=newsText(article);
-      const original=originalNewsUrl(article);
       const en=window.F1_LOCALE.english();
-      detail.innerHTML='<a class="text-link news-back" href="'+route("news")+'">'+(en?"Back to reports":"返回新闻列表")+'</a>'+
-        '<h1 class="page-title" tabindex="-1">'+safe(title)+'</h1>'+
-        (original?'<a class="action" target="_blank" rel="noopener noreferrer" href="'+safe(original)+'">'+(en?"Read full report":"阅读完整报道")+'</a>':
-          '<p class="sub">'+(en?"Full report link unavailable":"完整报道链接暂不可用")+'</p>');
+      const {title}=newsText(article,en);
+      const body=newsBody(article,en);
+      const caption=en?article.captionEn||article.caption:article.caption;
+      const context=newsSessions[article.id];
+      const unavailable=en?"This report has no full text available on this site.":"此报道暂未提供可在本站刊登的全文。";
+      detail.innerHTML='<button type="button" class="action news-back" data-news-entry="">'+(en?"Back to reports":"返回新闻列表")+'</button>'+
+        '<header><p class="eyebrow">'+safe(article.source||"F1")+' · '+safe(newsDate(article))+'</p>'+
+        '<h1 class="page-title" tabindex="-1">'+safe(title)+'</h1></header>'+
+        (article.image?'<figure>'+newsCover(article,1280)+(caption?'<figcaption>'+safe(caption)+'</figcaption>':'')+'</figure>':'')+
+        '<div class="news-body">'+(body||'<p class="sub">'+unavailable+'</p>')+
+        (context?'<section class="news-session">'+newsSessionBody(...context,en)+'</section>':'')+'</div>';
       return;
     }
 ` + js.slice(detailEnd);
+  js += `\n  document.addEventListener("click",event=>{
+    const button=event.target.closest("button[data-news-entry]");
+    if(!button)return;
+    const id=button.dataset.newsEntry;
+    location.hash="#/news"+(id?"/"+encodeURIComponent(id):"");
+  });\n`;
   edit('    const lead=recent.find(item=>item.id===officialNewsLeadId)||', '    const lead=candidates.find(item=>item.id===officialNewsLeadId)||');
+  edit(`<li><a class="text-link" href="'+route("news",article.id)+'">'+safe(article.title)+'</a></li>`,
+    `<li><button type="button" class="paddock-news-button text-link" data-news-entry="'+safe(article.id)+'">'+safe(article.title)+'</button></li>`);
   return js;
 }

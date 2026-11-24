@@ -128,8 +128,7 @@ function patchVideo(js, replace) {
     '    swap.hidden=!douyinSources[playing[0]]||!hasBilibili(playing[0]);',
     '    swap.textContent=douyin?(en?"Play on Bilibili":"切换哔哩哔哩"):(en?"Play on Douyin":"切换抖音");',
   ].join('\n');
-  js = replace(js, platformSwitch,
-    '    qs("#videoOriginal").href=douyin?"https://www.douyin.com/video/"+douyinSources[playing[0]].id:"https://www.bilibili.com/video/"+playing[0]+"/";');
+  js = replace(js, platformSwitch, '');
   js = replace(js, [
     '  qs("#videoSwitch").addEventListener("click",()=>{',
     '    playerSource=playerSource==="douyin"?"bilibili":"douyin";',
@@ -155,9 +154,22 @@ function patchVideo(js, replace) {
   js = js.replace('  const hasBilibili=', '  const officialVideo=row=>/^https:\\/\\/www\\.formula1\\.com\\/en\\/video\\/[a-z0-9-]+\\.\\d+$/i.test(row?.[8]||"");\n  const officialRows=items=>(items||[]).map(item=>["f1-"+item.url.split(".").at(-1),item.stamp,item.seconds||0,item.title,item.image||"",item.round,item.type,0,item.url]).filter(officialVideo);\n  const hasBilibili=');
   js = js.replace('source==="douyin"?Object.hasOwn(douyinSources,row[0]):hasBilibili(row[0])',
     'source==="f1"?officialVideo(row):source==="douyin"?Object.hasOwn(douyinSources,row[0]):hasBilibili(row[0])');
-  const videoClasses = '    const classes=lead?"video-feature":queue?"video-queue-item":"video-card";';
-  js = replace(js, videoClasses, videoClasses + `
-    if(officialVideo(row)) return '<a class="'+classes+'" href="'+safe(row[8])+'" target="_blank" rel="noopener noreferrer">'+markup+'</a>';`);
+  const sourceChoice = '    const source=preferred&&(!hasBilibili(id)||qs("#videoSource").value!=="bilibili")?"douyin":"bilibili";';
+  js = replace(js, sourceChoice, sourceChoice.replace('const source=', 'const source=officialVideo(row)?"f1":'));
+  const player = '  function loadPlayer() {';
+  js = replace(js, player, player + `
+    const retry=qs("#videoRetry");
+    retry.hidden=playerSource==="f1";
+    if(playerSource==="f1"){
+      const status=document.createElement("p");
+      status.className="video-unavailable sub";
+      status.textContent=english()?"The official source does not offer playback on this site.":"此视频的官方来源暂未开放站内播放。";
+      qs("#videoPlayer").replaceChildren(status);
+      showPlayerDetails();
+      return;
+    }`);
+  const credit = '    qs("#videoCredit").textContent=douyin?';
+  js = replace(js, credit, credit.replace('=douyin?', '=playerSource==="f1"?(en?"Formula 1 official":"F1 官网"):douyin?'));
   js = js.replace('    const lead=raceHighlights[0]||newest[0];', [
     '    const latest=newest.filter(row=>Date.parse(row[1])>=cutoff);',
     '    const score=row=>Math.log10(1+Math.max(0,Number(row[7])||0))*10-(Date.now()-Date.parse(row[1]))/3600000;',
@@ -168,20 +180,17 @@ function patchVideo(js, replace) {
   return js;
 }
 
-function patchIndex(index, profile, replace) {
+function patchIndex(index, replace) {
   index = replace(index, '  <script defer src="./video.js"></script>',
     '  <script defer src="./content-data.js"></script>\n  <script defer src="./video.js"></script>');
   const sourceField = '        <label>片源<select id="videoSource"><option value="">全部片源</option><option value="douyin">抖音</option><option value="bilibili">哔哩哔哩</option></select></label>';
   index = replace(index, sourceField, sourceField.replace('</select>', '<option value="f1">F1 官网</option></select>') +
     '\n        <label>月份<select id="videoMonth"><option value="">全部月份</option></select></label>');
   index = replace(index, '      <p id="videoCount" class="sub" role="status"></p>', [
-    '      <p class="sub" id="videoDouyinCoverage"><span>抖音档案收录已核对的 2026 年官号作品，尚未收齐。</span>',
-    '        <a class="text-link video-official-link" href="'+profile+'" target="_blank" rel="noopener noreferrer">查看抖音官方账号</a></p>',
+    '      <p class="sub" id="videoDouyinCoverage">抖音档案收录已核对的 2026 年官号作品，尚未收齐。</p>',
     '      <p id="videoCount" class="sub" role="status"></p>',
   ].join('\n'));
-  index = replace(index, '          <button class="action" type="button" id="videoSwitch" hidden></button>\n', '');
-  return replace(index, '          <button class="action" type="button" id="videoRetry">',
-    '          <a class="action" id="videoOriginal" target="_blank" rel="noopener noreferrer">打开官方原视频</a>\n          <button class="action" type="button" id="videoRetry">');
+  return replace(index, '          <button class="action" type="button" id="videoSwitch" hidden></button>\n', '');
 }
 
 export async function installContent({ root, site, cacheDir, replaceOnce }) {
@@ -208,7 +217,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   await Promise.all([
     patch('app.js', patchNews),
     patch('video.js', patchVideo),
-    patch('index.html', (html, replace) => patchIndex(html, douyin.profile, replace)),
+    patch('index.html', (html, replace) => patchIndex(html, replace)),
     writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, feed, notes, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
   ]);
   console.log('Content ready: ' + feed.items.length + ' recent news items, ' + douyin.items.length + ' verified Douyin videos.');

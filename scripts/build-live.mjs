@@ -56,7 +56,7 @@ async function installDashboard() {
 
   html = html.replaceAll('规则速查', '规则查询')
     .replace('竞赛程序、积分和处罚条款', '检索 FIA 全套规则和附录')
-    .replace('id="fiaLink"', 'id="fiaLink" href="https://www.fia.com/regulation/category/110"')
+    .replace(/<a id="fiaLink"[^>]*>[^<]*<\/a>/, '')
     .replace('placeholder="搜索安全车、轮胎、积分……"', 'placeholder="英文关键词、编号或常用中文术语"')
     .replace(/^.*<label class="news-body-filter".*\n/m, '');
   let routes = replaceOnce(app, 'weekend:"比赛周末",form:', 'weekend:"比赛周末",live:"比赛实况",form:', 'app.js');

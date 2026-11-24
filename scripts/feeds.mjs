@@ -104,7 +104,7 @@ async function officialHeadlines(feed) {
   return (items ?? []).flatMap(([id, stamp, title, summary, , , zh, info]) => {
     const date = Date.parse(stamp);
     const url = info?.url ?? links.get(id) ?? officialArticleUrl(id);
-    return url && title && Number.isFinite(date) ? [{ title, titleZh: zh?.title, url, date, source: info?.source || 'F1', search: summary ?? '' }] : [];
+    return url && title && Number.isFinite(date) ? [{ id, title, titleZh: zh?.title, url, date, source: info?.source || 'F1', search: summary ?? '' }] : [];
   });
 }
 
@@ -134,7 +134,7 @@ export async function liveNews(session, now, feed) {
       titles.add(title);
       links.add(item.url);
       return true;
-    }).slice(0, 12).map(({ title, titleZh, date, url, source }) => ({ title, titleZh, date, url, source }));
+    }).slice(0, 12).map(({ id, title, titleZh, date, url, source }) => ({ id, title, titleZh, date, url, source }));
     return { items, scope: relevant ? 'session' : 'series', coverage: coverage?.url };
   } catch {
     return { items: [], scope: 'unavailable' };
