@@ -2,6 +2,9 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { officialArticleUrl, officialNewsLinks, request, xmlText } from './feeds.mjs';
 import { circuitMedia, refreshEdition } from './edition.mjs';
+import { patchHeroPhoto } from './home-photo.mjs';
+import { recentDouyin } from './douyin-feed.mjs';
+import { writeReports } from './newsroom.mjs';
 import { patchNews } from './news-overlay.mjs';
 
 const biliAccount = 296086460;
@@ -29,7 +32,7 @@ async function chineseTitle(title) {
   return Number(data.responseStatus) === 200 && !data.quotaFinished && han(translated) ? translated : '';
 }
 
-async function buildNews(site, cacheDir, notes, edition, media) {
+async function buildNews(site, cacheDir, notes, edition) {
   const target = join(site, 'api', 'news', 'latest.json');
   const incoming = edition ? {} : await json(target, {});
   let feed = edition;
@@ -42,11 +45,12 @@ async function buildNews(site, cacheDir, notes, edition, media) {
       { title: [notes[id]?.title, zh?.title].find(han) || '' },
       { url: links.get(id) ?? info?.url ?? officialArticleUrl(id), source: 'F1' },
     ]);
-    feed = await refreshEdition({ feed: { items }, media, cacheDir });
+    feed = await refreshEdition({ feed: { items }, cacheDir });
   }
   await mkdir(join(site, 'api', 'news'), { recursive: true });
-  await writeJson(target, feed);
-  return feed;
+  const news = { items: feed.items, leadId: feed.leadId, checked: feed.checked, window: feed.window };
+  await writeJson(target, news);
+  return news;
 }
 
 export async function translateLiveHeadlines(news, cacheDir) {
@@ -87,6 +91,7 @@ async function buildVideos(site, cacheDir, refresh) {
     }));
   }
   const data = {
+    status: refresh ? (candidates.length && incoming.live !== false ? 'public-list' : 'archive') : previous.status || 'archive',
     items: [...official.values()].sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).slice(0, 80),
   };
   await mkdir(join(site, 'api', 'videos'), { recursive: true });
@@ -99,8 +104,17 @@ function patchVideo(js, replace) {
   if (!oldSources) throw new Error('The mirror’s video sources have changed.');
   const sources = [
     '  const officialDouyin=window.F1_CONTENT_EXTRAS.douyin;',
-    '  const douyinClips=officialDouyin.items.map(item=>["dy-"+item.id,item.stamp,item.seconds||0,item.title,item.cover||"",item.round,item.kind,0]);',
-    '  const douyinSources=Object.fromEntries(officialDouyin.items.map(item=>["dy-"+item.id,{...item,author:"F1世界锦标赛",title:[item.title,item.en]}]));',
+    '  const douyinSources=Object.create(null);',
+    '  function douyinRows(items) {',
+    '    return (items||[]).flatMap(item=>{',
+    '      if(!/^\\d{19}$/.test(item.id)||!item.title||!Number.isFinite(Date.parse(item.stamp)))return [];',
+    '      const id="dy-"+item.id;',
+    '      douyinSources[id]={...item,author:"F1世界锦标赛",title:[item.title,item.en||item.title]};',
+    '      return [[id,item.stamp,item.seconds||0,item.title,item.cover||"",item.round,item.kind,0]];',
+    '    });',
+    '  }',
+    '  const douyinClips=douyinRows(officialDouyin.items);',
+    '  let biliStatus=window.F1_CONTENT_EXTRAS.biliStatus;',
     '  const matchesSource=(row,source)=>!source||(source==="douyin"?Object.hasOwn(douyinSources,row[0]):hasBilibili(row[0]));',
     '',
   ].join('\n');
@@ -116,12 +130,12 @@ function patchVideo(js, replace) {
   js = replace(js, '(!source||(source==="douyin"?Object.hasOwn(douyinSources,row[0]):hasBilibili(row[0])))&&',
     'matchesSource(row,source)&&(!month||monthAt.format(new Date(row[1]))===month)&&');
   js = replace(js, 'qs("#videoList").innerHTML=items.length?', [
-    'qs("#videoDouyinCoverage").hidden=Boolean(source&&source!=="douyin");',
+    'qs("#videoDouyinCoverage").hidden=Boolean(source&&source!=="douyin")||officialDouyin.status==="public-list";\n    qs("#videoBiliCoverage").hidden=Boolean(source&&source!=="bilibili")||biliStatus==="public-list";',
     '    qs("#videoList").innerHTML=items.length?',
   ].join('\n'));
   js = js.replaceAll('all.length.toLocaleString()', 'all.filter(row=>matchesSource(row,source)).length.toLocaleString()');
   js = replace(js, 'signal:AbortSignal.timeout(10000)', 'signal:AbortSignal.timeout(10000),cache:"no-cache"');
-  js = replace(js, 'if(!Array.isArray(result?.items)||!result.items.length)return;', 'if(!Array.isArray(result?.items))return;\n      lastRefresh=Date.now();\n      result.items=result.items.filter(row=>hasBilibili(row[0]));\n      if(!result.items.length)return;');
+  js = replace(js, 'if(!Array.isArray(result?.items)||!result.items.length)return;', 'if(!Array.isArray(result?.items))return;\n      lastRefresh=Date.now();\n      result.items=[...result.items.filter(row=>hasBilibili(row[0])),...douyinRows(result.douyin)];\n      if(result.douyinStatus)officialDouyin.status=result.douyinStatus;\n      if(result.status)biliStatus=result.status;\n      if(!result.items.length)return;');
   js = replace(js, '      insert(result.items);\n      lastRefresh=Date.now();', '      insert(result.items);');
   const platformSwitch = [
     '    const swap=qs("#videoSwitch");',
@@ -151,32 +165,11 @@ function patchVideo(js, replace) {
     '      if(douyinClips.length&&!videos.has(douyinClips[0][0])) insert(douyinClips);\n      const data=await archive();\n      if(!active)return;\n      if(data){\n        for(const row of data.rows.filter(row=>hasBilibili(row[0]))) if(!videos.has(row[0])) insert([row]);\n        if(!classic.length) classic=data.classic.filter(row=>hasBilibili(row[0]));\n      }\n      if(videos.size){');
   js = replace(js, '  setInterval(()=>{if(active&&!document.hidden)sync();},300000);',
     '  setInterval(()=>{if(active&&!document.hidden)sync();},300000);\n  document.addEventListener("visibilitychange",()=>{if(active&&!document.hidden)sync();});');
-  js = js.replace('  const hasBilibili=', '  const officialVideo=row=>/^https:\\/\\/www\\.formula1\\.com\\/en\\/video\\/[a-z0-9-]+\\.\\d+$/i.test(row?.[8]||"");\n  const officialRows=items=>(items||[]).map(item=>["f1-"+item.url.split(".").at(-1),item.stamp,item.seconds||0,item.title,item.image||"",item.round,item.type,0,item.url]).filter(officialVideo);\n  const hasBilibili=');
-  js = js.replace('source==="douyin"?Object.hasOwn(douyinSources,row[0]):hasBilibili(row[0])',
-    'source==="f1"?officialVideo(row):source==="douyin"?Object.hasOwn(douyinSources,row[0]):hasBilibili(row[0])');
-  const sourceChoice = '    const source=preferred&&(!hasBilibili(id)||qs("#videoSource").value!=="bilibili")?"douyin":"bilibili";';
-  js = replace(js, sourceChoice, sourceChoice.replace('const source=', 'const source=officialVideo(row)?"f1":'));
-  const player = '  function loadPlayer() {';
-  js = replace(js, player, player + `
-    const retry=qs("#videoRetry");
-    retry.hidden=playerSource==="f1";
-    if(playerSource==="f1"){
-      const status=document.createElement("p");
-      status.className="video-unavailable sub";
-      status.textContent=english()?"The official source does not offer playback on this site.":"此视频的官方来源暂未开放站内播放。";
-      qs("#videoPlayer").replaceChildren(status);
-      showPlayerDetails();
-      return;
-    }`);
-  const credit = '    qs("#videoCredit").textContent=douyin?';
-  js = replace(js, credit, credit.replace('=douyin?', '=playerSource==="f1"?(en?"Formula 1 official":"F1 官网"):douyin?'));
   js = js.replace('    const lead=raceHighlights[0]||newest[0];', [
     '    const latest=newest.filter(row=>Date.parse(row[1])>=cutoff);',
     '    const score=row=>Math.log10(1+Math.max(0,Number(row[7])||0))*10-(Date.now()-Date.parse(row[1]))/3600000;',
     '    const lead=latest.sort((a,b)=>score(b)-score(a))[0]||newest[0];',
   ].join('\n'));
-  js = js.replace('      result.items=result.items.filter(row=>hasBilibili(row[0]));', '      result.items=[...result.items.filter(row=>hasBilibili(row[0])),...officialRows(result.official)];');
-  js = js.replace('  window.F1_VIDEOS={', '  insert(officialRows(window.F1_CONTENT_EXTRAS.feed.videos));\n  window.F1_VIDEOS={');
   return js;
 }
 
@@ -184,10 +177,11 @@ function patchIndex(index, replace) {
   index = replace(index, '  <script defer src="./video.js"></script>',
     '  <script defer src="./content-data.js"></script>\n  <script defer src="./video.js"></script>');
   const sourceField = '        <label>片源<select id="videoSource"><option value="">全部片源</option><option value="douyin">抖音</option><option value="bilibili">哔哩哔哩</option></select></label>';
-  index = replace(index, sourceField, sourceField.replace('</select>', '<option value="f1">F1 官网</option></select>') +
+  index = replace(index, sourceField, sourceField +
     '\n        <label>月份<select id="videoMonth"><option value="">全部月份</option></select></label>');
   index = replace(index, '      <p id="videoCount" class="sub" role="status"></p>', [
-    '      <p class="sub" id="videoDouyinCoverage">抖音档案收录已核对的 2026 年官号作品，尚未收齐。</p>',
+    '      <p class="sub" id="videoBiliCoverage" hidden>哔哩哔哩的最新清单暂不可用，现显示已核对的归档视频。</p>',
+    '      <p class="sub" id="videoDouyinCoverage">抖音官号最新清单暂未公开，现显示已核对的归档视频。</p>',
     '      <p id="videoCount" class="sub" role="status"></p>',
   ].join('\n'));
   return replace(index, '          <button class="action" type="button" id="videoSwitch" hidden></button>\n', '');
@@ -199,26 +193,46 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   if (!douyin || !/^https:\/\/www\.douyin\.com\/user\/[\w-]+$/.test(douyin.profile)) {
     throw new Error('The official Douyin account is missing from the archive.');
   }
-  douyin.items = [...new Map(douyin.items.filter(item => /^\d{19}$/.test(item.id)
-    && Date.parse(item.stamp) >= Date.parse('2026-01-01T00:00:00+08:00')
-    && Date.parse(item.stamp) < Date.parse('2027-01-01T00:00:00+08:00')).map(item => [item.id, item])).values()];
   const sectors = JSON.parse(await readFile(join(root, 'content', 'circuit-sectors-2026.json'), 'utf8'));
   await mkdir(cacheDir, { recursive: true });
+  const window = Math.floor(Date.now() / (3 * 3600_000));
   const saved = await json(join(cacheDir, 'edition.json'), {});
-  const edition = saved.window === Math.floor(Date.now() / (3 * 3600_000)) ? saved : null;
-  const [media, videos] = await Promise.all([circuitMedia(site, cacheDir), buildVideos(site, cacheDir, !edition)]);
-  const feed = await buildNews(site, cacheDir, notes, edition, media);
-  await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, official: feed.videos });
+  const edition = saved.window === window ? saved : null;
+  const douyinPath = join(cacheDir, 'douyin-public.json');
+  const previous = await json(douyinPath, { items: [] });
+  const refreshVideos = previous.window !== window;
+  const [media, videos, discovered] = await Promise.all([
+    circuitMedia(site, cacheDir),
+    buildVideos(site, cacheDir, refreshVideos),
+    refreshVideos ? recentDouyin(douyin.profile).catch(() => []) : previous.items,
+  ]);
+  const douyinStatus = refreshVideos ? discovered.length > 0 ? 'public-list' : 'archive' : previous.status;
+  if (refreshVideos) await writeJson(douyinPath, {
+    window, status: douyinStatus, checked: Date.now(),
+    items: [...new Map([...previous.items, ...discovered].map(item => [item.id, item])).values()],
+  });
+  const publicItems = (await json(douyinPath, previous)).items;
+  douyin.status = douyinStatus;
+  douyin.items = [...new Map([...douyin.items, ...publicItems].filter(item => /^\d{19}$/.test(item.id) &&
+    Number.isFinite(Date.parse(item.stamp)) && typeof item.title === 'string').map(item => [item.id, item])).values()]
+    .sort((a, b) => Date.parse(b.stamp) - Date.parse(a.stamp));
+  const externalNews = await buildNews(site, cacheDir, notes, edition);
+  const editorial = await writeReports(site, media);
+  Object.assign(notes, editorial.notes);
+  const originalItems = [...editorial.items, ...externalNews.items].sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
+  const feed = { ...externalNews, items: originalItems, leadId: editorial.items.sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]))[0]?.[0] };
+  await writeJson(join(site, 'api', 'news', 'latest.json'), feed);
+  await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, douyin: douyin.items, douyinStatus });
   const patch = async (asset, transform) => {
     const path = join(site, asset);
     const original = (await readFile(path, 'utf8')).replaceAll('\r\n', '\n');
     await writeFile(path, transform(original, (str, from, to) => replaceOnce(str, from, to, asset)));
   };
   await Promise.all([
-    patch('app.js', patchNews),
+    patch('app.js', (js, replace) => patchHeroPhoto(patchNews(js, replace))),
     patch('video.js', patchVideo),
     patch('index.html', (html, replace) => patchIndex(html, replace)),
-    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, feed, notes, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
+    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliStatus: videos.status, feed, notes, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
   ]);
   console.log('Content ready: ' + feed.items.length + ' recent news items, ' + douyin.items.length + ' verified Douyin videos.');
   return feed;

@@ -150,22 +150,25 @@ body:has(#liveMapDialog[open]) { overflow: hidden; }
 }
 
 .live-gallery {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
+  position: relative;
+  min-height: max(340px, calc(100svh - var(--live-header-height, 72px)));
   isolation: isolate;
   display: grid;
   align-items: end;
-  overflow: auto;
+  overflow: hidden;
   background: #111114;
 }
-html:has(body[data-current-page="live"] #liveGallery:not([hidden])) { overflow: hidden; scrollbar-gutter: auto; }
-body[data-current-page="live"]:has(#liveGallery:not([hidden])) > :is(header, footer) { visibility: hidden; }
+.live-page:has(#liveGallery:not([hidden])) { width: 100%; padding-block: 0; }
+.live-screen:has(#liveGallery:not([hidden])) { border: 0; border-radius: 0; padding: 0; }
+.live-screen:is(:fullscreen, [data-focus]) .live-gallery { min-height: 100svh; }
 .live-map .sector-details { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 470px) {
   .live-map .sector-details { grid-template-columns: 1fr; }
 }
-.live-gallery > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
+.live-gallery > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; opacity: 0; transition: opacity 850ms ease-in-out; }
+.live-gallery > img[data-previous] { opacity: 1; z-index: -3; }
+.live-gallery > img[data-active] { opacity: 1; z-index: -2; }
+@media (prefers-reduced-motion: reduce) { .live-gallery > img { transition: none; } }
 .live-gallery::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(transparent 35%, rgb(0 0 0 / .92)); }
 .live-gallery-caption { color: #fff; padding: clamp(18px, 5vw, 84px); padding-bottom: max(clamp(24px, 5vw, 84px), env(safe-area-inset-bottom)); text-shadow: 0 1px 5px black; }
 .live-gallery-caption h1 { font-size: clamp(1.75rem, 5vw, 4.5rem); line-height: 1.05; }
@@ -195,3 +198,4 @@ body[data-current-page="live"]:has(#liveGallery:not([hidden])) > :is(header, foo
 .regulation-reader-tools input { max-width: 100%; }
 .regulation-reader iframe { width: 100%; height: 66dvh; border: 0; }
 #ruleList > h2 { margin-top: 18px; }
+.regulation-translated { max-width: 74ch; white-space: pre-wrap; line-height: 1.8; margin-inline: auto; padding: 8px; }

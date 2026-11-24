@@ -146,3 +146,5 @@ F1 官网照片|F1 photo source
 第二位车手|Second driver
 英文关键词、编号或常用中文术语|English keyword, article number, or common Chinese term
 检索 FIA 全套规则和附录|Search the FIA regulations and appendices
+抖音官号最新清单暂未公开，现显示已核对的归档视频。|The latest Douyin feed is unavailable. Verified archived videos are shown.
+哔哩哔哩的最新清单暂不可用，现显示已核对的归档视频。|The latest Bilibili feed is unavailable. Verified archived videos are shown.

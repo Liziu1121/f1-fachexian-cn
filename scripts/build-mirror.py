@@ -59,7 +59,6 @@ with ThreadPoolExecutor(max_workers=4) as pool:
         path.write_text(script, encoding='utf-8')
 
     apis = [f'standings/{year}/{kind}' for year in range(2023, 2027) for kind in ('drivers', 'team')]
-    apis += ['featured-photo']
     try:
         edition = json.loads(Path('.live-cache/edition.json').read_text(encoding='utf-8'))
         refresh_edition = int(datetime.now(timezone.utc).timestamp() // 10800) != edition['window']

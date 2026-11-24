@@ -122,7 +122,15 @@ export function patchNews(js, replace) {
 
 ` + js.slice(archiveStart);
   edit('    const bodyOnly=qs("#newsBodyOnly").checked;\n', '');
-  edit('(!bodyOnly||hasNewsBody(item))&&', '');
+  edit('    const items=newsArchive.filter(item=>(!bodyOnly||hasNewsBody(item))&&', [
+    '    const readable=newsArchive.filter(item=>Boolean(newsBody(item,window.F1_LOCALE.english())));',
+    '    const items=readable.filter(item=>',
+  ].join('\n'));
+  const archiveBodyStart = js.indexOf('  function drawNewsArchive(');
+  const archiveBodyEnd = js.indexOf('  function newsMonth(', archiveBodyStart);
+  if (archiveBodyEnd < 0) throw new Error('News archive count integration point unavailable');
+  js = js.slice(0, archiveBodyStart) + js.slice(archiveBodyStart, archiveBodyEnd)
+    .replaceAll('newsArchive.length', 'readable.length') + js.slice(archiveBodyEnd);
   edit('["#newsSearch","input"],["#newsBodyOnly","change"]', '["#newsSearch","input"]');
   const detailStart = js.indexOf('    if(article){', js.indexOf('  function drawNews(id)'));
   const detailEnd = js.indexOf('    qs("#newsSpotlight").innerHTML=', detailStart);
@@ -149,8 +157,12 @@ export function patchNews(js, replace) {
     const id=button.dataset.newsEntry;
     location.hash="#/news"+(id?"/"+encodeURIComponent(id):"");
   });\n`;
+  edit('      .filter(item=>(item.title||item.titleEn)&&Date.parse(item.stamp)<=now+300000&&',
+    '      .filter(item=>Boolean(newsBody(item,window.F1_LOCALE.english()))&&(item.title||item.titleEn)&&Date.parse(item.stamp)<=now+300000&&');
   edit('    const lead=recent.find(item=>item.id===officialNewsLeadId)||', '    const lead=candidates.find(item=>item.id===officialNewsLeadId)||');
   edit(`<li><a class="text-link" href="'+route("news",article.id)+'">'+safe(article.title)+'</a></li>`,
     `<li><button type="button" class="paddock-news-button text-link" data-news-entry="'+safe(article.id)+'">'+safe(article.title)+'</button></li>`);
+  edit('    return [lead,...candidates.filter(item=>item.id!==lead.id)].slice(0,4);',
+    '    return lead?[lead,...candidates.filter(item=>item.id!==lead.id)].slice(0,4):[];');
   return js;
 }

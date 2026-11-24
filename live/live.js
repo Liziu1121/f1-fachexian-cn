@@ -6,6 +6,11 @@
   const screen = byId('liveScreen');
   const raceData = byId('liveRaceData');
   const gallery = byId('liveGallery');
+  const photoslots = [...gallery.querySelectorAll('[data-live-slide]')];
+  const header = document.querySelector('body > header');
+  if (header) new ResizeObserver(() => {
+    gallery.style.setProperty('--live-header-height', header.offsetHeight + 'px');
+  }).observe(header);
   const fullscreen = byId('liveFullscreen');
   const audio = byId('liveAudio');
   const refreshButton = byId('liveRefresh');
@@ -39,6 +44,7 @@
   let recording;
   let timelineFilter = 'all';
   let galleryCourse, galleryIndex = 0, galleryTimer, countdownTimer;
+  let photoRequest, photoTransition, activePhoto = 0;
   let galleryPaused = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let compareRequest, compareDetails;
   const comparison = new Map();
@@ -126,20 +132,44 @@
     setText('liveGalleryPause', galleryPaused ? '继续播放' : '暂停播放');
   }
 
-  function displayGallery(step = 0) {
+  async function displayGallery(step = 0) {
     if (!visible || gallery.hidden || document.hidden) return;
     const photos = window.F1_CONTENT_EXTRAS.galleries?.[galleryCourse] ?? [];
     setGalleryControls(photos.length);
-    const picture = byId('liveGalleryImage');
     const sourceLink = byId('liveGallerySource');
     sourceLink.hidden = !photos.length;
     byId('liveGalleryNumber').hidden = !photos.length;
-    if (!photos.length) { picture.hidden = true; return; }
+    if (!photos.length) return;
+
     galleryIndex = (galleryIndex + step + photos.length) % photos.length;
     const { image, source } = photos[galleryIndex];
-    if (picture.getAttribute('src') !== image) picture.src = image;
+    const current = photoslots[activePhoto];
+    if (image === photoRequest?.image) return;
+    if (current.src === image) { photoRequest = null; return; }
+    const request = { image };
+    photoRequest = request;
+    const incoming = new Image();
+    incoming.src = image;
+    try { await incoming.decode(); }
+    catch { if (photoRequest === request) photoRequest = null; return; }
+    if (photoRequest !== request || gallery.hidden || !visible) return;
+    photoRequest = null;
+
+    const nextSlot = photoslots[1 - activePhoto];
+    clearTimeout(photoTransition);
+    nextSlot.removeAttribute('data-previous');
+    nextSlot.src = image;
+    if (current.hasAttribute('data-active')) current.setAttribute('data-previous', '');
+    current.removeAttribute('data-active');
+    nextSlot.setAttribute('data-active', '');
+    photoTransition = setTimeout(() => current.removeAttribute('data-previous'), 900);
+    activePhoto = 1 - activePhoto;
     sourceLink.href = source;
     setText('liveGalleryNumber', `${galleryIndex + 1} / ${photos.length}`);
+    if (photos.length > 1 && !galleryPaused) {
+      const preload = new Image();
+      preload.src = photos[(galleryIndex + 1) % photos.length].image;
+    }
   }
 
   function updateCountdown() {
@@ -173,8 +203,6 @@
     galleryPaused = !galleryPaused;
     displayGallery();
   });
-  byId('liveGalleryImage').addEventListener('load', event => { event.target.hidden = false; });
-  byId('liveGalleryImage').addEventListener('error', event => { event.target.hidden = true; });
 
   function rowTable(first, second) {
     const entries = [
@@ -404,6 +432,7 @@
     const focusMoves = isLive ? gallery.contains(focus) : raceData.contains(focus);
     raceData.hidden = !isLive;
     gallery.hidden = isLive;
+    if (isLive) photoRequest = null;
     byId('liveSourceNotes').hidden = !isLive;
     drawLiveFrames(isLive);
 
@@ -529,6 +558,7 @@
 
   function hide() {
     visible = false;
+    photoRequest = null;
     clearInterval(galleryTimer);
     clearInterval(countdownTimer);
     clearTimeout(timer);

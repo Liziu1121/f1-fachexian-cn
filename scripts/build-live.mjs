@@ -7,6 +7,7 @@ import { activeRadio, archiveDelay, archiveDetails, dashboardArchiveVersion, mir
 import { fiaBulletins, liveNews } from './feeds.mjs';
 import { withArchiveAudio } from './radio-archive.mjs';
 import { populateRadioText } from './radio-text.mjs';
+import { installPdfReader } from './pdf-runtime.mjs';
 import { regulations } from './edition.mjs';
 import { installContent, translateLiveHeadlines } from './build-content.mjs';
 
@@ -178,6 +179,7 @@ await installDashboard();
 const [newsFeed] = await Promise.all([
   installContent({ root, site, cacheDir, replaceOnce }),
   regulations(site, cacheDir, new Date(now).getUTCFullYear()),
+  installPdfReader(site, cacheDir),
 ]);
 await versionAssets();
 await buildSnapshots(newsFeed);

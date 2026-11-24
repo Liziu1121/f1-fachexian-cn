@@ -44,7 +44,7 @@ export async function circuitMedia(site, cacheDir) {
       const slug = key === 'abu-dhabi' ? 'united-arab-emirates' : key;
       const source = `${f1}/en/racing/${year}/${slug}`;
       const names = [compact(key), ...(aliases[key] || [])];
-      const photos = new Map(), videos = new Map();
+      const photos = new Map();
       function collect(html, officialPage) {
         const sources = [...html.matchAll(/https:\/\/media\.formula1\.com\/image\/upload\/[^"\\ <]+/gi)];
         for (const [src] of sources) {
@@ -59,18 +59,7 @@ export async function circuitMedia(site, cacheDir) {
             source: officialPage,
           });
         }
-        if (officialPage !== source || Date.now() < date - 5 * 24 * hours) return;
-        for (const [, path] of html.matchAll(/href="(\/en\/video\/[\w-]+\.\d+)"/g)) {
-          const slug = path.split('/').at(-1).split('.')[0];
-          if (!names.some(name => compact(slug).includes(name))) continue;
-          const session = /(?:fp([123])|qualifying|sprint|race)-highlights/.exec(slug)?.[0];
-          const sessionKey = session?.startsWith('fp') ? session.slice(0, 3)
-            : { 'race-highlights': 'race', 'sprint-highlights': 'sprint', 'qualifying-highlights': 'q' }[session];
-          const stamp = race.sessions[sessionKey || 'race'] || race.sessions.race;
-          if (Date.parse(stamp) > Date.now()) continue;
-          const title = slug.replaceAll('-', ' ').replace(/\bfp([123])\b/, 'FP$1').replace(/^./, char => char.toUpperCase());
-          videos.set(path, { url: f1 + path, title, stamp, type: session ? 'highlights' : 'featured', round: key });
-        }
+
       }
       try {
         const html = await request(source, { redirect: 'follow' }).then(response => response.text()).catch(() => '');
@@ -86,9 +75,9 @@ export async function circuitMedia(site, cacheDir) {
           await request(older, { redirect: 'follow' }).then(response => response.text()).then(page => collect(page, older)).catch(() => {});
         }
         const saved = collection[key];
-        collection[key] = { checked: Date.now(),
-          photos: [...new Map([...photos, ...(saved?.photos || []).map(photo => [photo.image.split('/').slice(7).join('/').replace(/\.[^.]+$/, ''), photo])]).values()].slice(0, 10),
-          videos: videos.size ? [...videos.values()].slice(0, 18).map(video => ({ ...video, image: [...photos.values()][0]?.image })) : saved?.videos || [] };
+        const gallery = [...new Map([...photos, ...(saved?.photos || []).map(photo =>
+          [photo.image.split('/').slice(7).join('/').replace(/\.[^.]+$/, ''), photo])]).values()].slice(0, 10);
+        collection[key] = { checked: Date.now(), photos: gallery };
       } catch (error) {
         console.warn(`Circuit media ${key}: ${error.message}`);
       }
@@ -110,23 +99,6 @@ async function officialReports() {
   });
 }
 
-async function officialVideos(media) {
-  const page = await request(`${f1}/en/video`).then(response => response.text());
-  return page.replaceAll('\\"', '"').split(/(?=\{"videoId":"\d+")/g).flatMap(item => {
-    const id = item.match(/^\{"videoId":"(\d+)"/)?.[1];
-    if (!id) return [];
-    const path = item.match(/"url":"(\/en\/video\/[\w-]+\.\d+)"/)?.[1];
-    const stamp = item.match(/"publishedAt":"([^"]+)"/)?.[1];
-    const title = item.match(/"caption":"([^"]+)"/)?.[1];
-    if (!path || !title || !Number.isFinite(Date.parse(stamp))) return [];
-    const image = item.match(/"url":"(https:\/\/d2n9h2wits23hf\.cloudfront\.net\/image\/[^"]+)"/)?.[1] || '';
-    const round = Object.keys(media).find(key => path.includes(key));
-    const type = /highlights/.test(path) ? 'highlights' : /radio|onboard/.test(path) ? 'onboard' : /analysis/.test(path) ? 'analysis' : 'featured';
-    const seconds = Number(item.match(/"videoDurationInSeconds":(\d+)/)?.[1] || 0);
-    return [{ url: f1 + path, title: xmlText(title), stamp, image, round, type, seconds }];
-  });
-}
-
 const stopWords = new Set('the a an of in for to and at is after with from on as it his her says by or has how why what this that f1 formula grand prix will can but are was who'.split(' '));
 const terms = title => new Set(title.toLowerCase().match(/[a-z0-9]+/g)?.filter(word => word.length > 2 && !stopWords.has(word)));
 function similar(first, second) {
@@ -134,18 +106,15 @@ function similar(first, second) {
   return shared >= 3 && shared / Math.min(first.size, second.size) >= .55;
 }
 
-export async function refreshEdition({ feed, media, cacheDir }) {
+export async function refreshEdition({ feed, cacheDir }) {
   const path = join(cacheDir, 'edition.json');
   const previous = await read(path, { items: [], videos: [] });
   const now = Date.now();
   const window = Math.floor(now / (3 * hours));
   if (previous.window === window) return previous;
-  const [external, reports, latestVideos] = await Promise.all([
+  const [external, reports] = await Promise.all([
     publisherHeadlines(), officialReports().catch(error => {
       console.warn(`F1 headlines: ${error.message}`);
-      return [];
-    }), officialVideos(media).catch(error => {
-      console.warn(`F1 videos: ${error.message}`);
       return [];
     }),
   ]);
@@ -160,11 +129,7 @@ export async function refreshEdition({ feed, media, cacheDir }) {
     const sources = new Set(recent.filter(other => other.source !== source && similar(title, other.terms)).map(other => other.source));
     return { id: row[0], score: sources.size * 12 - (now - Date.parse(row[1])) / hours + (row[5] ? 1 : 0) };
   }).sort((a, b) => b.score - a.score)[0]?.id;
-  const raceVideos = Object.values(media).flatMap(item =>
-    item.videos.map(video => ({ ...video, image: video.image || item.photos[0]?.image })));
-  const videoPool = new Map([...previous.videos, ...raceVideos, ...latestVideos].map(video => [video.url, video]));
-  const videos = [...videoPool.values()].sort((a, b) => Date.parse(b.stamp) - Date.parse(a.stamp)).slice(0, 100);
-  const edition = { items, leadId: lead, videos, checked: now, window };
+  const edition = { items, leadId: lead, checked: now, window };
   await write(path, edition);
   return edition;
 }
