@@ -219,7 +219,12 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   const externalNews = await buildNews(site, cacheDir, notes, edition);
   const editorial = await writeReports(site, media);
   Object.assign(notes, editorial.notes);
-  const originalItems = [...editorial.items, ...externalNews.items].sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
+  const originalItems = [...editorial.items, ...externalNews.items].map(row => {
+    const note = notes[row[0]];
+    const onSite = Boolean((note?.fullTextZh?.length || note?.body?.length) &&
+      (note?.fullTextEn?.length || note?.bodyEn?.length));
+    return [...row.slice(0, 7), { ...row[7], onSite }];
+  }).sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
   const feed = { ...externalNews, items: originalItems, leadId: editorial.items.sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]))[0]?.[0] };
   await writeJson(join(site, 'api', 'news', 'latest.json'), feed);
   await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, douyin: douyin.items, douyinStatus });

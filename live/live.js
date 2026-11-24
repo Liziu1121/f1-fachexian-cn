@@ -295,7 +295,7 @@
   }
 
   function drawBulletins(news, bulletins) {
-    const items = news?.items?.filter(item => link(item.url)) ?? [];
+    const items = news?.items?.filter(item => item.onSite && item.id) ?? [];
     setMarkup('liveHeadlines', items.length ? `<ul class="live-feed live-articles">${items.map(item => {
       const translated = !english() && item.titleZh;
       return `<li><div><button type="button" class="live-news-button" data-news-entry="${html(item.id || '')}" lang="${translated ? 'zh-CN' : 'en'}">${html(translated || item.title)}</button><small>${html(item.source)} · <time datetime="${new Date(item.date).toISOString()}">${dateTime(item.date)}</time></small></div></li>`;
