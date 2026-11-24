@@ -11,13 +11,13 @@ const read = (path, fallback) => readFile(path, 'utf8').then(JSON.parse).catch((
 async function speechPython(cacheDir) {
   if (process.env.F1_RADIO_PYTHON) return process.env.F1_RADIO_PYTHON;
   if (!process.env.GITHUB_ACTIONS) return null;
-  const environment = join(cacheDir, 'radio-runtime');
+  const environment = join(cacheDir, 'radio-runtime-av15');
   const python = join(environment, 'bin', 'python');
   try {
     await access(join(environment, 'f1-ready'));
   } catch {
     await run('python3', ['-m', 'venv', environment], { timeout: 30_000 });
-    await run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', 'faster-whisper==1.2.1'], { timeout: 90_000 });
+    await run(python, ['-m', 'pip', 'install', '--disable-pip-version-check', 'faster-whisper==1.2.1', 'av==15.1.0'], { timeout: 90_000 });
     await writeFile(join(environment, 'f1-ready'), '1');
   }
   return python;
