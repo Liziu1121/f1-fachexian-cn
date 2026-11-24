@@ -1,5 +1,6 @@
 const official = 'https://www.formula1.com';
 const publishers = [
+  ['Sky Sports', 'https://www.skysports.com/rss/12433'],
   ['Motorsport.com', 'https://www.motorsport.com/rss/f1/news/'],
   ['Autosport', 'https://www.autosport.com/rss/f1/news/'],
 ];
@@ -69,9 +70,19 @@ const rss = publishers.map(([source, feed]) => cache(async () => {
     try { url = new URL(link); } catch { return []; }
     if (url.protocol !== 'https:' || url.hostname !== feedHost) return [];
     url.search = '';
-    return [{ title, url: url.href, date, source, search: tag(item, 'category').join(' ') }];
+    const image = item.match(/<(?:media:thumbnail|media:content|enclosure)\b[^>]*\burl=["']([^"']+)["']/i)?.[1] || tag(item, 'image')[0];
+    return [{ title, url: url.href, date, source, image, search: tag(item, 'category').join(' ') }];
   });
 }, 120_000));
+
+export async function publisherHeadlines() {
+  const settled = await Promise.allSettled(rss.map(read => read('f1')));
+  return settled.flatMap((result, index) => {
+    if (result.status === 'fulfilled') return result.value;
+    console.warn(`News feed ${publishers[index][0]}: ${result.reason.message}`);
+    return [];
+  });
+}
 
 export const officialNewsIndex = 'https://www.formula1.com/en/latest';
 const articlePath = /^\/en\/latest\/article\/[\w.-]+\.([A-Za-z0-9]{16,24})$/;
@@ -89,16 +100,16 @@ export function officialArticleUrl(id) {
 
 async function officialHeadlines(feed) {
   const { items } = feed ?? await originalData('news/latest');
-  const links = await officialNewsLinks('latest').catch(() => new Map());
+  const links = feed ? new Map() : await officialNewsLinks('latest').catch(() => new Map());
   return (items ?? []).flatMap(([id, stamp, title, summary, , , zh, info]) => {
     const date = Date.parse(stamp);
     const url = info?.url ?? links.get(id) ?? officialArticleUrl(id);
-    return url && title && Number.isFinite(date) ? [{ title, titleZh: zh?.title, url, date, source: 'F1', search: summary ?? '' }] : [];
+    return url && title && Number.isFinite(date) ? [{ title, titleZh: zh?.title, url, date, source: info?.source || 'F1', search: summary ?? '' }] : [];
   });
 }
 
 const headlines = cache(async feed => {
-  const sources = await Promise.allSettled([officialHeadlines(feed), ...rss.map(read => read('f1'))]);
+  const sources = await Promise.allSettled([officialHeadlines(feed), ...(feed ? [] : [publisherHeadlines()])]);
   if (sources.every(source => source.status === 'rejected')) throw new Error('News feeds unavailable');
   return sources.flatMap(source => source.status === 'fulfilled' ? source.value : []);
 }, 120_000);

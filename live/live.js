@@ -23,7 +23,7 @@
   }).observe(byId('liveDriverWindow'));
   const content = window.F1_CONTENT;
   const html = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-  const officialHosts = new Set(['livetiming.formula1.com', 'www.formula1.com', 'www.motorsport.com', 'www.autosport.com', 'www.fia.com', 'f1archive.org']);
+  const officialHosts = new Set(['livetiming.formula1.com', 'www.formula1.com', 'www.skysports.com', 'www.motorsport.com', 'www.autosport.com', 'www.fia.com', 'f1archive.org']);
   const cachedMarkup = new WeakMap();
   const sessionNames = new Map([
     ['Practice 1', '一练'], ['Practice 2', '二练'], ['Practice 3', '三练'], ['Qualifying', '排位赛'],
@@ -41,6 +41,11 @@
   let recording;
   let driverFocus;
   let timelineFilter = 'all';
+  let galleryCourse, galleryIndex = 0, galleryTimer, countdownTimer;
+  let galleryPaused = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let compareRequest, compareDetails;
+  const comparison = new Map();
+  const language = (zh, en) => english() ? en : zh;
   const archiveDelay = 30 * 60_000;
   const compounds = { SOFT: ['S', '软胎'], MEDIUM: ['M', '中性胎'], HARD: ['H', '硬胎'], INTERMEDIATE: ['I', '半雨胎'], WET: ['W', '全雨胎'] };
 
@@ -219,9 +224,147 @@
       `<dl class="live-driver-stats">${stats}</dl>${strategy ? `<p class="live-strategy-label">轮胎策略</p><ul class="live-strategy">${strategy}</ul>` : ''}`);
   }
 
+  function upcomingRound(now = Date.now()) {
+    return Object.entries(window.F1_DATA.races).map(([course, race]) => {
+      const starts = Object.entries(race.sessions).filter(([key]) => key !== 'grid')
+        .map(([, stamp]) => Date.parse(stamp)).filter(Number.isFinite).sort((a, b) => a - b);
+      return { course, start: starts.find(stamp => stamp > now), race: Date.parse(race.sessions.race) };
+    }).filter(round => round.race > now && round.start).sort((a, b) => a.start - b.start)[0];
+  }
+
+  function setGalleryControls(available) {
+    byId('liveGalleryPrevious').disabled = available < 2;
+    byId('liveGalleryNext').disabled = available < 2;
+    const pause = byId('liveGalleryPause');
+    pause.disabled = available < 2;
+    pause.setAttribute('aria-pressed', String(galleryPaused));
+    setText('liveGalleryPause', galleryPaused ? '继续播放' : '暂停播放');
+  }
+
+  function displayGallery(step = 0) {
+    const gallery = byId('liveGallery');
+    if (!visible || gallery.hidden || document.hidden) return;
+    const photos = window.F1_CONTENT_EXTRAS.galleries?.[galleryCourse] ?? [];
+    setGalleryControls(photos.length);
+    if (!photos.length) return;
+    galleryIndex = (galleryIndex + step + photos.length) % photos.length;
+    const { image, source } = photos[galleryIndex];
+    const picture = byId('liveGalleryImage');
+    picture.hidden = false;
+    if (picture.getAttribute('src') !== image) picture.src = image;
+    byId('liveGallerySource').href = source;
+    setText('liveGalleryNumber', `${galleryIndex + 1} / ${photos.length}`);
+  }
+
+  function updateCountdown() {
+    const count = byId('liveGalleryCountdown');
+    if (!visible || byId('liveGallery').hidden) return;
+    const round = upcomingRound();
+    if (!round) return setText(count.id, '下一站赛程待公布');
+    const minutes = Math.max(0, Math.ceil((round.start - Date.now()) / 60_000));
+    const name = content.circuit[round.course]?.[english() ? 1 : 0] || round.course;
+    setText(count.id, language(
+      `距下一站赛事 · ${name} · ${Math.floor(minutes / 1440)} 天 ${Math.floor(minutes / 60) % 24} 小时 ${minutes % 60} 分钟`,
+      `Next round · ${name} · ${Math.floor(minutes / 1440)}d ${Math.floor(minutes / 60) % 24}h ${minutes % 60}m`));
+  }
+
+  function drawGallery(mode, session) {
+    const gallery = byId('liveGallery');
+    const course = upcomingRound()?.course || sessionCircuit(session)?.[0];
+    const shown = ['recent', 'waiting', 'settling', 'unavailable'].includes(mode);
+    gallery.hidden = !shown || !course || !window.F1_CONTENT_EXTRAS.galleries?.[course]?.length;
+    if (gallery.hidden) return;
+    if (galleryCourse !== course) { galleryCourse = course; galleryIndex = 0; }
+    setText('liveGalleryTitle', content.circuit[course]?.[english() ? 1 : 0] || course);
+    displayGallery();
+    updateCountdown();
+  }
+
+  for (const [id, step] of [['liveGalleryPrevious', -1], ['liveGalleryNext', 1]]) {
+    byId(id).addEventListener('click', () => displayGallery(step));
+  }
+  byId('liveGalleryPause').addEventListener('click', () => {
+    galleryPaused = !galleryPaused;
+    displayGallery();
+  });
+  byId('liveGalleryImage').addEventListener('error', event => { event.target.hidden = true; });
+
+  function rowTable(first, second) {
+    const entries = [
+      ['排名', 'Position', row => row.finish || row.position],
+      ['圈数', 'Laps', row => row.laps],
+      ['最快圈', 'Best lap', row => lapTime(row.best)],
+      ['上一圈', 'Last lap', row => lapTime(row.last)],
+      ['领先差', 'Gap to leader', row => gap(row.gap)],
+      ...[0, 1, 2].map(i => [`S${i + 1}`, `S${i + 1}`, row => measurement(row.measuredLap?.sectors[i]?.time, 's', 3)]),
+      ['最快圈测速点', 'Speed trap on best lap', row => measurement(row.measuredLap?.speed, 'km/h')],
+      ['进站次数', 'Pit stops', row => row.pitCount],
+      ['轮胎策略', 'Tyre strategy', row => row.tyreStints?.map(stint => `${stint.compound} L${stint.start}–${stint.end}`).join(' · ') || '—'],
+    ];
+    return `<table class="live-compare-table"><thead><tr><th scope="col">${language('项目', 'Metric')}</th>${[first, second].map(row =>
+      `<th scope="col">${html(driverName(row.driver))}</th>`).join('')}</tr></thead><tbody>${entries.map(([zh, en, value]) =>
+      `<tr><th scope="row">${language(zh, en)}</th><td>${html(value(first) ?? '—')}</td><td>${html(value(second) ?? '—')}</td></tr>`).join('')}</tbody></table>`;
+  }
+
+  function setOptions(select, options, preferred) {
+    const old = select.value || String(preferred ?? '');
+    const markup = options.map(([value, label]) => `<option value="${html(value)}">${html(label)}</option>`).join('');
+    if (cachedMarkup.get(select) === markup) return;
+    select.innerHTML = markup;
+    cachedMarkup.set(select, markup);
+    if (options.some(([value]) => String(value) === old)) select.value = old;
+  }
+
+  function drawComparisonRows() {
+    const rows = compareDetails?.rows || [];
+    const first = byId('liveCompareFirst'), second = byId('liveCompareSecond');
+    const options = rows.map(row => [row.driver.number, driverName(row.driver)]);
+    setOptions(first, options, options[0]?.[0]);
+    setOptions(second, options, options[1]?.[0]);
+    first.disabled = second.disabled = rows.length < 2;
+    if (first.value === second.value && rows.length > 1) second.value = options.find(([value]) => String(value) !== first.value)[0];
+    for (const option of second.options) option.disabled = option.value === first.value;
+    const selected = [first, second].map(select => rows.find(row => String(row.driver.number) === select.value));
+    setMarkup('liveCompareResult', selected.every(Boolean) ?
+      rowTable(...selected) : empty(language('该场次暂无足够的车手数据。', 'This session has insufficient data for comparison.')));
+  }
+
+  async function drawComparison(view) {
+    const selector = byId('liveCompareSession');
+    const sessions = view?.index?.archives || [];
+    setOptions(selector, sessions.map(session => [session.key, sessionLabel(session)]), view?.session?.key);
+    selector.disabled = !sessions.length;
+    const key = selector.value;
+    if (!key) { compareDetails = null; drawComparisonRows(); return; }
+    if (view?.details?.session.key === key) comparison.set(key, view.details);
+    if (comparison.has(key)) { compareDetails = comparison.get(key); drawComparisonRows(); return; }
+    if (compareRequest === key) return;
+    compareRequest = key;
+    setMarkup('liveCompareResult', empty(language('正在读取场次数据…', 'Loading session data…')));
+    try {
+      const data = await readSnapshot(key, AbortSignal.timeout(8000));
+      if (data.details?.session.key === key) comparison.set(key, data.details);
+    } catch { /* A later refresh can retry. */ }
+    if (compareRequest === key) compareRequest = null;
+    if (selector.value === key) { compareDetails = comparison.get(key); drawComparisonRows(); }
+  }
+  byId('liveCompareSession').addEventListener('change', () => drawComparison(snapshot));
+  byId('liveCompareFirst').addEventListener('change', drawComparisonRows);
+  byId('liveCompareSecond').addEventListener('change', drawComparisonRows);
+
+  const radioClips = view => view?.details?.radio ?? view?.radio ?? [];
+  function radioTranscript(clip) {
+    const transcript = clip?.transcript;
+    if (!transcript?.text) return language('转写暂不可用', 'Transcript unavailable');
+    const translated = !english() && transcript.language !== 'zh';
+    const name = new Intl.DisplayNames([english() ? 'en' : 'zh-CN'], { type: 'language', fallback: 'code' }).of(transcript.language);
+    if (translated && !transcript.zh) return `${name} · ${transcript.text}（中文译文暂不可用）`;
+    return `${name} · ${translated ? transcript.zh : transcript.text}`;
+  }
+
   function drawTimeline(details, isLive) {
     const events = (details?.events ?? []).map(item => ({ ...item, kind: 'control' }));
-    const clips = (details?.radio ?? []).filter(clip => link(clip.url)).map(item => ({ ...item, kind: 'radio' }));
+    const clips = radioClips(snapshot).filter(clip => link(clip.url)).map(item => ({ ...item, kind: 'radio' }));
     const shown = [...events, ...clips].filter(item => timelineFilter === 'all' || item.kind === timelineFilter).sort((a, b) => b.date - a.date);
     const showPublic = isLive && timelineFilter !== 'radio';
     showFrame(controlFrame, showPublic);
@@ -238,7 +381,8 @@
       const flag = ['RED', 'GREEN', 'YELLOW', 'DOUBLE YELLOW', 'CHEQUERED'].includes(item.flag) ? item.flag : '';
       const heading = radio ? '车队电台' : flag ? '旗况' : '赛会消息';
       const body = radio ? `<p>${html(driverName(item.driver))}</p><small>${html(teamName(item.driver.team))}</small>` +
-        `<button type="button" class="action outline live-play" data-recording="${html(item.url)}" aria-label="播放车队电台 · ${html(driverName(item.driver))}">播放</button>`
+        `<button type="button" class="action outline live-play" data-recording="${html(item.url)}" aria-label="播放车队电台 · ${html(driverName(item.driver))}">播放</button>` +
+        `<p class="live-radio-text">${html(radioTranscript(item))}</p>`
         : `<p>${html(controlText(item.message))}</p>${item.lap ? `<small>L${html(item.lap)}</small>` : ''}`;
       return `<li><time datetime="${new Date(item.date).toISOString()}">${clock(item.date)}</time><article>` +
         `<span class="live-feed-tag" data-kind="${item.kind}"${flag ? ` data-flag="${flag}"` : ''}>${heading}</span>${body}</article></li>`;
@@ -378,11 +522,16 @@
     }
   }
 
+  function indexNextSession() {
+    return snapshot?.index?.schedule.findLast(session => session.startsAt > Date.now());
+  }
+
   function draw() {
     const { session, mode, details, news, bulletins, generatedAt, scheduleUnavailable, archiveUnavailable } = snapshot ?? {};
     const isLive = mode === 'live' || mode === 'settling';
     drawLiveFrames(isLive);
-    drawMap(session);
+    drawGallery(mode, session);
+    drawMap(isLive ? session : indexNextSession() ?? session);
     byId('liveQualifyingDetails').hidden = !isLive || !/qualifying|shootout/i.test(session.name);
     setText('liveState', states[mode] ?? '正在读取实况');
     byId('liveState').dataset.state = mode ?? 'loading';
@@ -400,6 +549,7 @@
     drawDriver(details, isLive);
     drawTimeline(details, isLive);
     drawBulletins(news, bulletins);
+    drawComparison(snapshot);
     const timestamp = byId('liveSnapshotAt');
     timestamp.hidden = !news?.items?.length || !Number.isFinite(generatedAt);
     if (!timestamp.hidden) setText('liveSnapshotAt', `资讯快照发布于 · ${dateTime(generatedAt)} · 北京时区`);
@@ -468,6 +618,7 @@
     const sameWeekend = sameContext || (session?.meeting != null && session.meeting === context?.meeting);
     return {
       index, session, mode, saved, details: saved?.details, pollMs,
+      radio: sameSession(index.activeRadio?.session, session) ? index.activeRadio.clips : [],
       generatedAt: index.generatedAt,
       scheduleUnavailable: !loaded,
       archiveUnavailable: Boolean(archive && !validArchive),
@@ -510,6 +661,8 @@
 
   function hide() {
     visible = false;
+    clearInterval(galleryTimer);
+    clearInterval(countdownTimer);
     clearTimeout(timer);
     request?.abort();
     request = null;
@@ -529,6 +682,8 @@
     if (visible) return;
     snapshot = null;
     visible = true;
+    galleryTimer = setInterval(() => { if (!galleryPaused) displayGallery(1); }, 7000);
+    countdownTimer = setInterval(updateCountdown, 1000);
     draw();
     refresh();
   }
@@ -587,10 +742,11 @@
     }
     const play = event.target.closest('[data-recording]');
     if (!play || !link(play.dataset.recording)) return;
-    recording = snapshot?.details?.radio.find(clip => clip.url === play.dataset.recording);
+    recording = radioClips(snapshot).find(clip => clip.url === play.dataset.recording);
     if (!recording) return;
     setText('liveRecording', [driverName(recording.driver), clock(recording.date), recording.source].filter(Boolean).join(' · '));
     const player = byId('livePlayer');
+    setText('liveRadioText', radioTranscript(recording));
     player.hidden = false;
     byId('liveAudioStatus').hidden = true;
     byId('liveRecordingLink').href = recording.originalUrl || recording.url;
@@ -609,6 +765,7 @@
   });
   window.addEventListener('f1:language', () => {
     if (visible) draw();
+    if (recording) setText('liveRadioText', radioTranscript(recording));
     if (recording) setText('liveRecording', [driverName(recording.driver), clock(recording.date), recording.source].filter(Boolean).join(' · '));
   });
 

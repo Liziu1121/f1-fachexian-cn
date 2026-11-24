@@ -134,3 +134,15 @@ F1 官方赛道图|F1 official circuit map
 可缩放的官方赛道图|Zoomable official circuit map
 官方赛道图暂不可用|Official circuit map unavailable
 正在加载官方赛道图|Loading official circuit map
+休赛期间的赛道照片|Circuit gallery between sessions
+上一张|Previous photo
+下一张|Next photo
+暂停播放|Pause slideshow
+继续播放|Resume slideshow
+F1 官网照片|F1 photo source
+下一站赛程待公布|Next round schedule pending
+车手数据对比|Driver data comparison
+第一位车手|First driver
+第二位车手|Second driver
+英文关键词、编号或常用中文术语|English keyword, article number, or common Chinese term
+检索 FIA 全套规则和附录|Search the FIA regulations and appendices

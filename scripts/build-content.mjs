@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { officialArticleUrl, officialNewsLinks, request, xmlText } from './feeds.mjs';
+import { circuitMedia, refreshEdition } from './edition.mjs';
 import { patchNews } from './news-overlay.mjs';
 
 const biliAccount = 296086460;
@@ -19,16 +20,6 @@ function plain(value) {
   return xmlText(String(value ?? '').replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim();
 }
 
-async function articleSummary(url) {
-  const page = await request(url, { redirect: 'follow' }).then(response => response.text());
-  const description = plain(page.match(/<meta name="description" content="([^"]+)"/i)?.[1]);
-  if (!description || /^Don.t miss a Formula 1 moment/i.test(description)) return '';
-  const words = description.split(' ');
-  if (words.length <= 25) return description;
-  const sentence = description.match(/^[^.!?]+[.!?](?=\s|$)/)?.[0];
-  return sentence && sentence.split(' ').length <= 25 ? sentence : words.slice(0, 25).join(' ') + '…';
-}
-
 async function chineseTitle(title) {
   if (!title || new TextEncoder().encode(title).byteLength > 500) return '';
   const url = new URL('https://api.mymemory.translated.net/get');
@@ -38,40 +29,23 @@ async function chineseTitle(title) {
   return Number(data.responseStatus) === 200 && !data.quotaFinished && han(translated) ? translated : '';
 }
 
-async function buildNews(site, cacheDir, notes) {
+async function buildNews(site, cacheDir, notes, edition, media) {
   const target = join(site, 'api', 'news', 'latest.json');
-  const cachePath = join(cacheDir, 'news-content.json');
-  const [incoming, previous, links] = await Promise.all([
-    json(target, {}), json(cachePath, {}), officialNewsLinks('latest').catch(() => new Map()),
-  ]);
-  const idOf = row => row[0];
-  const valid = row => Array.isArray(row) && officialArticleUrl(row[0]) && Number.isFinite(Date.parse(row[1])) && plain(row[2]);
-  const older = new Map((previous.items ?? []).filter(valid).map(row => [idOf(row), row]));
-  const all = new Map(older);
-  for (const row of (incoming.items ?? []).filter(valid)) all.set(idOf(row), row);
-  const rows = [...all.values()].sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).slice(0, 80);
-  const enrich = async (row, index) => {
-    const [id, stamp, title, summary, kind, image, zh] = row;
-    const cache = older.get(id);
-    const note = notes[id];
-    const url = links.get(id) ?? cache?.[7]?.url ?? officialArticleUrl(id);
-    let full = cache?.[7]?.metadata ? cache[3] : '';
-    if (!full && url && index < 18) full = await articleSummary(url).catch(() => '');
-    let titleZh = [note?.title, zh?.title, cache?.[6]?.title].find(han);
-    if (!titleZh && index < 10) titleZh = await chineseTitle(title).catch(() => '');
-    const summaryZh = [note?.summary, zh?.summary, cache?.[6]?.summary].find(han);
-    return [id, stamp, plain(title), full || plain(summary), kind, image,
-      { title: titleZh ?? '', summary: summaryZh ?? '' }, { url, metadata: Boolean(full) }];
-  };
-  const items = [];
-  for (let i = 0; i < rows.length; i += 4) {
-    items.push(...await Promise.all(rows.slice(i, i + 4).map((row, offset) => enrich(row, i + offset))));
+  const incoming = edition ? {} : await json(target, {});
+  let feed = edition;
+  if (!feed) {
+    const rows = (incoming.items ?? []).filter(row => Array.isArray(row) && officialArticleUrl(row[0]) &&
+      Number.isFinite(Date.parse(row[1])) && plain(row[2]));
+    const links = rows.length ? await officialNewsLinks('latest').catch(() => new Map()) : new Map();
+    const items = rows.map(([id, stamp, title, , kind, image, zh, info]) => [
+      id, stamp, plain(title), '', kind, image,
+      { title: [notes[id]?.title, zh?.title].find(han) || '' },
+      { url: links.get(id) ?? info?.url ?? officialArticleUrl(id), source: 'F1' },
+    ]);
+    feed = await refreshEdition({ feed: { items }, media, cacheDir });
   }
-  const feed = { ...incoming, leadId: incoming.leadId ?? previous.leadId, items };
-  if (items.length) {
-    await mkdir(join(site, 'api', 'news'), { recursive: true });
-    await Promise.all([writeJson(target, feed), writeJson(cachePath, feed)]);
-  }
+  await mkdir(join(site, 'api', 'news'), { recursive: true });
+  await writeJson(target, feed);
   return feed;
 }
 
@@ -100,12 +74,12 @@ async function verifiedVideo(id) {
   }
 }
 
-async function buildVideos(site, cacheDir) {
+async function buildVideos(site, cacheDir, refresh) {
   const target = join(site, 'api', 'videos', 'mainland.json');
   const cachePath = join(cacheDir, 'official-video.json');
   const [incoming, previous] = await Promise.all([json(target, {}), json(cachePath, {})]);
   const official = new Map((previous.items ?? []).map(row => [row[0], row]));
-  const candidates = (incoming.items ?? []).filter(row =>
+  const candidates = (refresh || !previous.items ? incoming.items ?? [] : []).filter(row =>
     Array.isArray(row) && biliId.test(row[0]) && Number.isFinite(Date.parse(row[1])) && typeof row[3] === 'string');
   for (let i = 0; i < Math.min(candidates.length, 20); i += 4) {
     await Promise.all(candidates.slice(i, i + 4).map(async row => {
@@ -116,7 +90,8 @@ async function buildVideos(site, cacheDir) {
     items: [...official.values()].sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).slice(0, 80),
   };
   await mkdir(join(site, 'api', 'videos'), { recursive: true });
-  await Promise.all([writeJson(target, data), writeJson(cachePath, data)]);
+  await writeJson(cachePath, data);
+  return data;
 }
 
 function patchVideo(js, replace) {
@@ -141,7 +116,7 @@ function patchVideo(js, replace) {
   js = replace(js, '(!source||(source==="douyin"?Object.hasOwn(douyinSources,row[0]):hasBilibili(row[0])))&&',
     'matchesSource(row,source)&&(!month||monthAt.format(new Date(row[1]))===month)&&');
   js = replace(js, 'qs("#videoList").innerHTML=items.length?', [
-    'qs("#videoDouyinCoverage").hidden=source==="bilibili";',
+    'qs("#videoDouyinCoverage").hidden=Boolean(source&&source!=="douyin");',
     '    qs("#videoList").innerHTML=items.length?',
   ].join('\n'));
   js = js.replaceAll('all.length.toLocaleString()', 'all.filter(row=>matchesSource(row,source)).length.toLocaleString()');
@@ -177,6 +152,19 @@ function patchVideo(js, replace) {
     '      if(douyinClips.length&&!videos.has(douyinClips[0][0])) insert(douyinClips);\n      const data=await archive();\n      if(!active)return;\n      if(data){\n        for(const row of data.rows.filter(row=>hasBilibili(row[0]))) if(!videos.has(row[0])) insert([row]);\n        if(!classic.length) classic=data.classic.filter(row=>hasBilibili(row[0]));\n      }\n      if(videos.size){');
   js = replace(js, '  setInterval(()=>{if(active&&!document.hidden)sync();},300000);',
     '  setInterval(()=>{if(active&&!document.hidden)sync();},300000);\n  document.addEventListener("visibilitychange",()=>{if(active&&!document.hidden)sync();});');
+  js = js.replace('  const hasBilibili=', '  const officialVideo=row=>/^https:\\/\\/www\\.formula1\\.com\\/en\\/video\\/[a-z0-9-]+\\.\\d+$/i.test(row?.[8]||"");\n  const officialRows=items=>(items||[]).map(item=>["f1-"+item.url.split(".").at(-1),item.stamp,item.seconds||0,item.title,item.image||"",item.round,item.type,0,item.url]).filter(officialVideo);\n  const hasBilibili=');
+  js = js.replace('source==="douyin"?Object.hasOwn(douyinSources,row[0]):hasBilibili(row[0])',
+    'source==="f1"?officialVideo(row):source==="douyin"?Object.hasOwn(douyinSources,row[0]):hasBilibili(row[0])');
+  const videoClasses = '    const classes=lead?"video-feature":queue?"video-queue-item":"video-card";';
+  js = replace(js, videoClasses, videoClasses + `
+    if(officialVideo(row)) return '<a class="'+classes+'" href="'+safe(row[8])+'" target="_blank" rel="noopener noreferrer">'+markup+'</a>';`);
+  js = js.replace('    const lead=raceHighlights[0]||newest[0];', [
+    '    const latest=newest.filter(row=>Date.parse(row[1])>=cutoff);',
+    '    const score=row=>Math.log10(1+Math.max(0,Number(row[7])||0))*10-(Date.now()-Date.parse(row[1]))/3600000;',
+    '    const lead=latest.sort((a,b)=>score(b)-score(a))[0]||newest[0];',
+  ].join('\n'));
+  js = js.replace('      result.items=result.items.filter(row=>hasBilibili(row[0]));', '      result.items=[...result.items.filter(row=>hasBilibili(row[0])),...officialRows(result.official)];');
+  js = js.replace('  window.F1_VIDEOS={', '  insert(officialRows(window.F1_CONTENT_EXTRAS.feed.videos));\n  window.F1_VIDEOS={');
   return js;
 }
 
@@ -184,7 +172,7 @@ function patchIndex(index, profile, replace) {
   index = replace(index, '  <script defer src="./video.js"></script>',
     '  <script defer src="./content-data.js"></script>\n  <script defer src="./video.js"></script>');
   const sourceField = '        <label>片源<select id="videoSource"><option value="">全部片源</option><option value="douyin">抖音</option><option value="bilibili">哔哩哔哩</option></select></label>';
-  index = replace(index, sourceField, sourceField +
+  index = replace(index, sourceField, sourceField.replace('</select>', '<option value="f1">F1 官网</option></select>') +
     '\n        <label>月份<select id="videoMonth"><option value="">全部月份</option></select></label>');
   index = replace(index, '      <p id="videoCount" class="sub" role="status"></p>', [
     '      <p class="sub" id="videoDouyinCoverage"><span>抖音档案收录已核对的 2026 年官号作品，尚未收齐。</span>',
@@ -207,7 +195,11 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
     && Date.parse(item.stamp) < Date.parse('2027-01-01T00:00:00+08:00')).map(item => [item.id, item])).values()];
   const sectors = JSON.parse(await readFile(join(root, 'content', 'circuit-sectors-2026.json'), 'utf8'));
   await mkdir(cacheDir, { recursive: true });
-  const [feed] = await Promise.all([buildNews(site, cacheDir, notes), buildVideos(site, cacheDir)]);
+  const saved = await json(join(cacheDir, 'edition.json'), {});
+  const edition = saved.window === Math.floor(Date.now() / (3 * 3600_000)) ? saved : null;
+  const [media, videos] = await Promise.all([circuitMedia(site, cacheDir), buildVideos(site, cacheDir, !edition)]);
+  const feed = await buildNews(site, cacheDir, notes, edition, media);
+  await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, official: feed.videos });
   const patch = async (asset, transform) => {
     const path = join(site, asset);
     const original = (await readFile(path, 'utf8')).replaceAll('\r\n', '\n');
@@ -217,7 +209,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
     patch('app.js', patchNews),
     patch('video.js', patchVideo),
     patch('index.html', (html, replace) => patchIndex(html, douyin.profile, replace)),
-    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, feed, notes, sectors }) + ';\n'),
+    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, feed, notes, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
   ]);
   console.log('Content ready: ' + feed.items.length + ' recent news items, ' + douyin.items.length + ' verified Douyin videos.');
   return feed;

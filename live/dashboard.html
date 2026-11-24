@@ -21,6 +21,20 @@
       <dl class="live-metrics" id="liveMetrics" hidden></dl>
       <p class="live-notice" id="liveNotice" hidden></p>
 
+      <section class="live-gallery live-panel" id="liveGallery" aria-label="休赛期间的赛道照片" hidden>
+        <img id="liveGalleryImage" alt="" decoding="async">
+        <div class="live-gallery-caption">
+          <h2 id="liveGalleryTitle"></h2>
+          <p id="liveGalleryCountdown"></p>
+          <div class="live-gallery-controls">
+            <button class="action outline" id="liveGalleryPrevious" type="button">上一张</button>
+            <button class="action outline" id="liveGalleryPause" type="button" aria-pressed="false">暂停播放</button>
+            <button class="action outline" id="liveGalleryNext" type="button">下一张</button>
+            <span id="liveGalleryNumber"></span>
+            <a class="text-link" id="liveGallerySource" target="_blank" rel="noopener noreferrer">F1 官网照片</a>
+          </div>
+        </div>
+      </section>
       <div class="live-grid">
         <section class="live-panel live-board" aria-labelledby="liveTimingTitle">
           <div class="live-panel-head">
@@ -78,6 +92,7 @@
             <div id="livePlayer" class="live-player" hidden>
               <p class="sub" id="liveRecording"></p>
               <audio id="liveAudio" controls preload="none" aria-label="播放车队电台"></audio>
+              <p class="live-radio-text" id="liveRadioText"></p>
               <p class="sub" id="liveAudioStatus" role="status" hidden></p>
               <a class="text-link" id="liveRecordingLink" target="_blank" rel="noopener">打开原始录音</a>
             </div>
@@ -95,6 +110,15 @@
           </section>
         </div>
       </div>
+      <section class="live-panel live-driver-compare" aria-labelledby="liveCompareTitle">
+        <div class="live-panel-head"><h2 id="liveCompareTitle">车手数据对比</h2></div>
+        <div class="live-compare-tools">
+          <label>场次<select id="liveCompareSession"></select></label>
+          <label>第一位车手<select id="liveCompareFirst"></select></label>
+          <label>第二位车手<select id="liveCompareSecond"></select></label>
+        </div>
+        <div id="liveCompareResult" class="live-scroll" role="region" aria-labelledby="liveCompareTitle" tabindex="0"></div>
+      </section>
       <dialog class="live-map-dialog" id="liveMapDialog" aria-labelledby="liveMapDialogTitle">
         <div class="live-map-toolbar">
           <h2 id="liveMapDialogTitle">F1 官方赛道图</h2>

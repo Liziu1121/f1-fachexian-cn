@@ -1,9 +1,13 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { Script } from 'node:vm';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { archiveDelay, archiveDetails, dashboardArchiveVersion, mirrorCalendar, openCalendar } from './live-data.mjs';
+import { activeRadio, archiveDelay, archiveDetails, dashboardArchiveVersion, mirrorCalendar, openCalendar } from './live-data.mjs';
 import { fiaBulletins, liveNews } from './feeds.mjs';
+import { withArchiveAudio } from './radio-archive.mjs';
+import { populateRadioText } from './radio-text.mjs';
+import { regulations } from './edition.mjs';
 import { installContent, translateLiveHeadlines } from './build-content.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -39,7 +43,7 @@ async function installDashboard() {
   addAfter('  <link rel="stylesheet" href="./style.css">', '\n  <link rel="stylesheet" href="./live.css">');
   addAfter('  <link rel="stylesheet" href="./live.css">', '\n  <link rel="stylesheet" href="./circuit-sectors.css">');
   addBefore('  <script defer src="./app.js"></script>',
-    '  <script defer src="./circuit-sectors.js"></script>\n  <script defer src="./live.js"></script>\n');
+    '  <script defer src="./circuit-sectors.js"></script>\n  <script defer src="./live.js"></script>\n  <script defer src="./regulations.js"></script>\n');
   addBefore('      <a href="#/weekend" data-nav="weekend" class="nav-weekend">',
     '      <a href="#/live" data-nav="live" class="nav-live">比赛实况</a>\n');
   addAfter('        <a class="menu-group-title" href="#/trackside" data-nav="trackside">赛道上</a>',
@@ -50,6 +54,11 @@ async function installDashboard() {
     '<a class="action outline" href="#/live">比赛实况</a>');
   addBefore('  <section class="frame section page" id="weekend" data-page="weekend" hidden>', dashboard);
 
+  html = html.replaceAll('规则速查', '规则查询')
+    .replace('竞赛程序、积分和处罚条款', '检索 FIA 全套规则和附录')
+    .replace('id="fiaLink"', 'id="fiaLink" href="https://www.fia.com/regulation/category/110"')
+    .replace('placeholder="搜索安全车、轮胎、积分……"', 'placeholder="英文关键词、编号或常用中文术语"')
+    .replace(/^.*<label class="news-body-filter".*\n/m, '');
   let routes = replaceOnce(app, 'weekend:"比赛周末",form:', 'weekend:"比赛周末",live:"比赛实况",form:', 'app.js');
   routes = replaceOnce(routes, 'weekend:"race",form:', 'weekend:"race",live:"trackside",form:', 'app.js');
   const routeSetup = '    selectedFromCalendar=undefined;\n';
@@ -58,12 +67,19 @@ async function installDashboard() {
   const trackLink = '">查看本站场次</a></div></div>\'';
   routes = replaceOnce(routes, trackLink + ';',
     trackLink + ' + window.F1_CIRCUIT_SECTORS.render(k,{diagram:true});', 'app.js');
+  routes = routes.replaceAll('规则速查', '规则查询');
+  const ruleStart = routes.indexOf('  function drawRules(');
+  const ruleEnd = routes.indexOf('\n  const newsReports=', ruleStart);
+  if (ruleStart < 0 || ruleEnd < 0) throw new Error('Rules integration point unavailable');
+  routes = routes.slice(0, ruleStart) + '  function drawRules() { window.F1_REGULATIONS.open(); }\n' + routes.slice(ruleEnd);
+  routes = routes.replace('  qs("#ruleFilter").addEventListener("input",()=>drawRules());', '')
+    .replace('  qs("#fiaLink").href=content.fia;', '');
   const localeAnchor = '比赛周末|Race Weekend\n';
-  const labels = replaceOnce(locale, localeAnchor, localeAnchor + translations, 'locale.js');
+  const labels = replaceOnce(locale, localeAnchor, localeAnchor + translations, 'locale.js').replaceAll('规则速查|', '规则查询|');
 
   await Promise.all([
     ...[['index.html', html], ['app.js', routes], ['locale.js', labels]].map(([file, content]) => writeFile(join(site, file), content)),
-    ...['live.js', 'live.css', 'circuit-sectors.js', 'circuit-sectors.css'].map(file => copyFile(join(sources, file), join(site, file))),
+    ...['live.js', 'regulations.js', 'live.css', 'circuit-sectors.js', 'circuit-sectors.css'].map(file => copyFile(join(sources, file), join(site, file))),
   ]);
 }
 
@@ -79,8 +95,10 @@ async function previousSnapshot() {
 async function versionAssets() {
   const index = join(site, 'index.html');
   let page = await readText(index);
-  for (const file of ['live.css', 'circuit-sectors.css', 'content-data.js', 'circuit-sectors.js', 'live.js', 'locale.js', 'video.js', 'app.js']) {
-    const hash = createHash('sha256').update(await readFile(join(site, file))).digest('hex').slice(0, 12);
+  for (const file of ['live.css', 'circuit-sectors.css', 'content-data.js', 'circuit-sectors.js', 'live.js', 'regulations.js', 'locale.js', 'video.js', 'app.js']) {
+    const content = await readFile(join(site, file));
+    if (file.endsWith('.js')) new Script(content.toString('utf8'), { filename: file });
+    const hash = createHash('sha256').update(content).digest('hex').slice(0, 12);
     page = replaceOnce(page, `"./${file}"`, `"./${file}?v=${hash}"`, 'index.html');
   }
   await writeFile(index, page);
@@ -122,13 +140,26 @@ async function buildSnapshots(newsFeed) {
   const archives = candidates.filter(session => stored.has(session.key));
 
   const context = schedule.find(session => session.startsAt <= now) ?? archives[0];
+  const current = now < context?.endsAt + archiveDelay ? context : null;
+  const clips = current ? await activeRadio(current) : [];
+  await Promise.all(archives.map(async session => {
+    const details = stored.get(session.key);
+    if (!details.radio?.length || now - details.radioArchiveCheckedAt < 12 * 3600_000) return;
+    details.radio = await withArchiveAudio(session, details.radio);
+    details.radioArchiveCheckedAt = now;
+  }));
+  const radio = await populateRadioText({ clips: [...clips, ...archives.flatMap(session => stored.get(session.key).radio || [])], cacheDir, root });
+  for (const session of archives) {
+    const details = stored.get(session.key);
+    details.radio = (details.radio || []).map(radio);
+  }
   const [news, bulletins] = await Promise.all([
     liveNews(context, now, newsFeed).then(feed => translateLiveHeadlines(feed, cacheDir)),
     fiaBulletins(context, schedule),
   ]);
   const sameContext = context?.startsAt === previous.contextStartsAt;
   const index = {
-    generatedAt: now, schedule, archives, contextStartsAt: context?.startsAt,
+    generatedAt: now, schedule, archives, activeRadio: current && { session: current, clips: clips.map(radio) }, contextStartsAt: context?.startsAt,
     news: sameContext && news.scope === 'unavailable' ? previous.news ?? news : news,
     bulletins: sameContext && bulletins.unavailable ? previous.bulletins ?? bulletins : bulletins,
   };
@@ -144,6 +175,9 @@ async function buildSnapshots(newsFeed) {
 }
 
 await installDashboard();
-const newsFeed = await installContent({ root, site, cacheDir, replaceOnce });
+const [newsFeed] = await Promise.all([
+  installContent({ root, site, cacheDir, replaceOnce }),
+  regulations(site, cacheDir, new Date(now).getUTCFullYear()),
+]);
 await versionAssets();
 await buildSnapshots(newsFeed);

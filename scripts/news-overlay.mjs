@@ -8,6 +8,7 @@ export function patchNews(js, replace) {
     '    const value=article.sourceUrl||article.url||(/^[A-Za-z0-9]{16,24}$/.test(article.id)?"https://www.formula1.com/en/latest/article/news."+article.id:"");\n'+
     '    try {\n'+
     '      const url=new URL(value);\n'+
+    '      if(url.protocol==="https:"&&["www.skysports.com","www.motorsport.com","www.autosport.com"].includes(url.hostname)) return url.href;\n'+
     '      if(url.origin==="https://www.formula1.com"&&url.pathname.startsWith("/en/latest/")) return url.href;\n'+
     '    } catch {}\n'+
     '    return "";\n'+
@@ -45,6 +46,7 @@ export function patchNews(js, replace) {
     '        newsArchive.push(article);',
     '        changed.add(id);',
     '      }',
+    '      if (info?.source) article.source=info.source;',
     '      if (info?.url && article.sourceUrl!==info.url) {',
     '        article.sourceUrl=info.url;',
     '        changed.add(id);',
@@ -115,5 +117,39 @@ export function patchNews(js, replace) {
     '      if(currentPage==="news"&&!window.F1_LOCALE.english()){nextNewsFetch=0;refreshVisibleNews();}\n'+
     '    });\n'+
     '  }');
+  const cardStart = js.indexOf('  function newsCard(');
+  const archiveStart = js.indexOf('  function drawNewsArchive(', cardStart);
+  if (cardStart < 0 || archiveStart < 0) throw new Error('News cards integration point unavailable');
+  js = js.slice(0, cardStart) + `  function newsCard(item,lead=false,cover=false) {
+    const original=originalNewsUrl(item);
+    const href=safe(original||route("news",item.id));
+    const external=original?' target="_blank" rel="noopener noreferrer"':'';
+    const {title}=newsText(item);
+    const label=window.F1_LOCALE.english()?"Read full report":"阅读完整报道";
+    return '<article class="news-card'+(lead?' news-lead':'')+'">'+
+      (cover&&item.image?'<a class="news-visual" href="'+href+'"'+external+' tabindex="-1" aria-hidden="true">'+newsCover(item,lead?1100:700,!lead)+'</a>':'')+
+      '<div class="news-card-copy"><div class="race-kicker">'+safe(item.source||"F1")+" · "+safe(newsDate(item))+'</div><h2><a href="'+href+'"'+external+'>'+safe(title)+'</a></h2>'+
+      '<a class="text-link" href="'+href+'"'+external+'>'+label+'</a></div></article>';
+  }
+
+` + js.slice(archiveStart);
+  edit('    const bodyOnly=qs("#newsBodyOnly").checked;\n', '');
+  edit('(!bodyOnly||hasNewsBody(item))&&', '');
+  edit('["#newsSearch","input"],["#newsBodyOnly","change"]', '["#newsSearch","input"]');
+  const detailStart = js.indexOf('    if(article){', js.indexOf('  function drawNews(id)'));
+  const detailEnd = js.indexOf('    qs("#newsSpotlight").innerHTML=', detailStart);
+  if (detailStart < 0 || detailEnd < 0) throw new Error('News detail integration point unavailable');
+  js = js.slice(0, detailStart) + `    if(article){
+      const {title}=newsText(article);
+      const original=originalNewsUrl(article);
+      const en=window.F1_LOCALE.english();
+      detail.innerHTML='<a class="text-link news-back" href="'+route("news")+'">'+(en?"Back to reports":"返回新闻列表")+'</a>'+
+        '<h1 class="page-title" tabindex="-1">'+safe(title)+'</h1>'+
+        (original?'<a class="action" target="_blank" rel="noopener noreferrer" href="'+safe(original)+'">'+(en?"Read full report":"阅读完整报道")+'</a>':
+          '<p class="sub">'+(en?"Full report link unavailable":"完整报道链接暂不可用")+'</p>');
+      return;
+    }
+` + js.slice(detailEnd);
+  edit('    const lead=recent.find(item=>item.id===officialNewsLeadId)||', '    const lead=candidates.find(item=>item.id===officialNewsLeadId)||');
   return js;
 }

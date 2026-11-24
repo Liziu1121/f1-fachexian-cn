@@ -2,7 +2,7 @@ import { request } from './feeds.mjs';
 import { withArchiveAudio } from './radio-archive.mjs';
 
 export const archiveDelay = 30 * 60_000;
-export const dashboardArchiveVersion = 1;
+export const dashboardArchiveVersion = 3;
 const api = 'https://api.openf1.org/v1';
 let nextRequest = Promise.resolve();
 
@@ -99,15 +99,33 @@ function timedLap(lap) {
   };
 }
 
+function driverIdentity(rows) {
+  return new Map(rows.map(row => [row.driver_number, {
+    number: row.driver_number, name: row.full_name || row.broadcast_name || row.name_acronym,
+    code: row.name_acronym, team: row.team_name, color: /^[\da-f]{6}$/i.test(row.team_colour) ? `#${row.team_colour}` : null,
+  }]));
+}
+
+function publishedRadio(rows, driver) {
+  return dated(rows).flatMap(row => {
+    const url = radioUrl(row.recording_url);
+    return url ? [{ date: row.date, driver: driver(row.driver_number), url }] : [];
+  });
+}
+
+export async function activeRadio(session) {
+  if (!session?.key) return [];
+  const [radio, drivers] = await Promise.allSettled(['team_radio', 'drivers'].map(name => openF1(name, { session_key: session.key })));
+  const identity = driverIdentity(drivers.value ?? []);
+  return publishedRadio(radio.value ?? [], number => identity.get(number) ?? { number });
+}
+
 export async function archiveDetails(session) {
   const names = ['session_result', 'laps', 'race_control', 'team_radio', 'drivers', 'stints', 'pit', 'weather'];
   if (session.type === 'Race') names.push('intervals');
   const results = await Promise.allSettled(names.map(name => openF1(name, { session_key: session.key })));
   const feeds = Object.fromEntries(names.map((name, index) => [name, results[index].value]));
-  const identity = new Map((feeds.drivers ?? []).map(row => [row.driver_number, {
-    number: row.driver_number, name: row.full_name || row.broadcast_name || row.name_acronym,
-    code: row.name_acronym, team: row.team_name, color: /^[\da-f]{6}$/i.test(row.team_colour) ? `#${row.team_colour}` : null,
-  }]));
+  const identity = driverIdentity(feeds.drivers ?? []);
   const driver = number => identity.get(number) ?? { number };
   const laps = lapSummary(feeds.laps ?? []);
   const stints = byDriver(feeds.stints ?? []);
@@ -135,10 +153,7 @@ export async function archiveDetails(session) {
   const controls = dated(feeds.race_control ?? []);
   const events = controls.filter(row => row.message && !(row.scope === 'Sector' && row.flag === 'CLEAR')).slice(0, 32)
     .map(row => ({ date: row.date, lap: row.lap_number, message: row.message, flag: row.flag }));
-  const clips = dated(feeds.team_radio ?? []).flatMap(row => {
-    const url = radioUrl(row.recording_url);
-    return url ? [{ date: row.date, driver: driver(row.driver_number), url }] : [];
-  }).slice(0, 30);
+  const clips = publishedRadio(feeds.team_radio ?? [], driver);
   const weather = dated(feeds.weather ?? [])[0];
   return { session, rows, events, radio: await withArchiveAudio(session, clips),
     controlAvailable: Boolean(feeds.race_control), radioAvailable: Boolean(feeds.team_radio),
