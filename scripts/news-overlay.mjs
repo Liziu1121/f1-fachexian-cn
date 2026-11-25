@@ -2,7 +2,11 @@ export function patchNews(js, replace) {
   const edit = (from, to) => { js = replace(js, from, to); };
   edit('  const newsReports=window.F1_NEWS_REPORTS;',
     '  const newsExtras=window.F1_CONTENT_EXTRAS;\n  const newsReports=window.F1_NEWS_REPORTS;');
-  edit('return Boolean(newsReports[article.id]', 'return Boolean(newsExtras.notes[article.id]?.body?.length||newsReports[article.id]');
+  edit('  function hasNewsBody(article) {\n    return Boolean(newsReports[article.id]||newsSessions[article.id]||article.body?.length);',
+    '  function hasNewsBody(article,en=window.F1_LOCALE.english()) {\n'+
+    '    const note=newsExtras.notes[article.id];\n'+
+    '    return Boolean((en?note?.fullTextEn:note?.fullTextZh)?.length||newsReports[article.id]?.length||'+
+    '(en?note?.bodyEn:note?.body)?.length||(en&&article.en?.length>2)||article.body?.length);');
   const oldText = '    if (en) return {title:article.titleEn||article.en?.[0]||article.title,summary:article.summaryEn||article.en?.[1]||article.summary};\n'+
     '    return {\n'+
     '      title:isChineseNewsText(article.title)?article.title:"中文标题待更新",\n'+
@@ -97,7 +101,17 @@ export function patchNews(js, replace) {
   js = js.slice(0, cardStart) + `  function newsBody(article,en) {
     const note=newsExtras.notes[article.id];
     const full=en ? note?.fullTextEn : note?.fullTextZh;
-    if (full?.length) return full.map(paragraph=>'<p>'+safe(paragraph)+'</p>').join("");
+    if (full?.length) {
+      const paragraphs=full.map(paragraph=>'<p>'+safe(paragraph)+'</p>').join("");
+      const table=en ? note?.classification?.en : note?.classification?.zh;
+      if (!table) return paragraphs;
+      const title=en?"Session classification":"场次成绩";
+      const headers=table.header.map(label=>'<th scope="col">'+safe(label)+'</th>').join("");
+      const rows=table.rows.map(row=>'<tr>'+row.map(cell=>'<td>'+safe(cell)+'</td>').join("")+'</tr>').join("");
+      return paragraphs+'<section class="news-section"><h2 id="newsClassificationTitle">'+title+'</h2>'+
+        '<div class="table-wrap" role="region" tabindex="0" aria-labelledby="newsClassificationTitle">'+
+        '<table><thead><tr>'+headers+'</tr></thead><tbody>'+rows+'</tbody></table></div></section>';
+    }
     const sections=newsReports[article.id];
     const paragraphs=(en?note?.bodyEn:note?.body)||(en&&article.en?.length>2?article.en.slice(2):article.body||[]);
     const content=sections?.length ? sections.map(([heading,zh,english])=>'<section class="news-section">'+
@@ -111,7 +125,7 @@ export function patchNews(js, replace) {
   function newsCard(item,lead=false,cover=false) {
     const {title}=newsText(item);
     const en=window.F1_LOCALE.english();
-    const available=Boolean(newsBody(item,en));
+    const available=hasNewsBody(item,en);
     const label=available?(en?"Read on this site":"站内阅读"):(en?"Full text unavailable":"暂无站内全文");
     return '<article class="news-card'+(lead?' news-lead':'')+'">'+
       (cover&&item.image?'<div class="news-visual">'+newsCover(item,lead?1100:700,!lead)+'</div>':'')+
@@ -123,9 +137,12 @@ export function patchNews(js, replace) {
 ` + js.slice(archiveStart);
   edit('    const bodyOnly=qs("#newsBodyOnly").checked;\n', '');
   edit('    const items=newsArchive.filter(item=>(!bodyOnly||hasNewsBody(item))&&', [
-    '    const readable=newsArchive.filter(item=>Boolean(newsBody(item,window.F1_LOCALE.english())));',
+    '    const readable=newsArchive.filter(item=>hasNewsBody(item));',
     '    const items=readable.filter(item=>',
   ].join('\n'));
+  edit('[item.title,item.summary,item.titleEn,item.summaryEn,item.kind].some(value=>value?.toLowerCase().includes(word))',
+    '[item.title,item.summary,item.titleEn,item.summaryEn,item.kind,...(newsExtras.notes[item.id]?.fullTextZh||[]),'+
+    '...(newsExtras.notes[item.id]?.fullTextEn||[])].some(value=>value?.toLowerCase().includes(word))');
   const archiveBodyStart = js.indexOf('  function drawNewsArchive(');
   const archiveBodyEnd = js.indexOf('  function newsMonth(', archiveBodyStart);
   if (archiveBodyEnd < 0) throw new Error('News archive count integration point unavailable');
@@ -158,7 +175,7 @@ export function patchNews(js, replace) {
     location.hash="#/news"+(id?"/"+encodeURIComponent(id):"");
   });\n`;
   edit('      .filter(item=>(item.title||item.titleEn)&&Date.parse(item.stamp)<=now+300000&&',
-    '      .filter(item=>Boolean(newsBody(item,window.F1_LOCALE.english()))&&(item.title||item.titleEn)&&Date.parse(item.stamp)<=now+300000&&');
+    '      .filter(item=>hasNewsBody(item)&&(item.title||item.titleEn)&&Date.parse(item.stamp)<=now+300000&&');
   edit('    const lead=recent.find(item=>item.id===officialNewsLeadId)||', '    const lead=candidates.find(item=>item.id===officialNewsLeadId)||');
   edit(`<li><a class="text-link" href="'+route("news",article.id)+'">'+safe(article.title)+'</a></li>`,
     `<li><button type="button" class="paddock-news-button text-link" data-news-entry="'+safe(article.id)+'">'+safe(article.title)+'</button></li>`);
