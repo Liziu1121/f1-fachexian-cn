@@ -7,6 +7,7 @@ import { biliAccount, biliId, latestBilibili } from './bilibili-feed.mjs';
 import { recentDouyin } from './douyin-feed.mjs';
 import { writeReports } from './newsroom.mjs';
 import { patchNews } from './news-overlay.mjs';
+import { sourceReports } from './source-reports.mjs';
 
 const han = value => typeof value === 'string' && /\p{Script=Han}/u.test(value);
 const json = async (path, fallback) => {
@@ -259,10 +260,11 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   douyin.items = [...new Map([...douyin.items, ...publicItems].filter(item => /^\d{19}$/.test(item.id) &&
     Number.isFinite(Date.parse(item.stamp)) && typeof item.title === 'string').map(item => [item.id, item])).values()]
     .sort((a, b) => Date.parse(b.stamp) - Date.parse(a.stamp));
-  const externalNews = await buildNews(site, cacheDir, notes, edition);
-  const editorial = await writeReports(site, media);
-  Object.assign(notes, editorial.notes, licensed.notes);
-  const originalItems = [...editorial.items, ...licensed.items, ...externalNews.items].map(row => {
+  const [externalNews, editorial, sourced] = await Promise.all([
+    buildNews(site, cacheDir, notes, edition), writeReports(site, media), sourceReports(root, cacheDir, media),
+  ]);
+  Object.assign(notes, editorial.notes, licensed.notes, sourced.notes);
+  const originalItems = [...editorial.items, ...licensed.items, ...sourced.items, ...externalNews.items].map(row => {
     const note = notes[row[0]];
     const onSite = Boolean((note?.fullTextZh?.length || note?.body?.length) &&
       (note?.fullTextEn?.length || note?.bodyEn?.length));

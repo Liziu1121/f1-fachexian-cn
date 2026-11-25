@@ -40,6 +40,7 @@ export function patchNews(js, replace) {
     '        changed.add(id);',
     '      }',
     '      if (info?.source) article.source=info.source;',
+    '      if (info?.dateOnly) article.dateOnly=true;',
     '      if (info?.url && article.sourceUrl!==info.url) {',
     '        article.sourceUrl=info.url;',
     '        changed.add(id);',
@@ -95,6 +96,8 @@ export function patchNews(js, replace) {
     '      if(currentPage==="news"&&!window.F1_LOCALE.english()){nextNewsFetch=0;refreshVisibleNews();}\n'+
     '    });\n'+
     '  }');
+  edit('return item.stamp?time(item.stamp):item.date||snapshot;',
+    'return item.dateOnly?new Intl.DateTimeFormat(window.F1_LOCALE.english()?"en-GB":"zh-CN",{month:"long",day:"numeric",timeZone:"UTC"}).format(new Date(item.stamp)):item.stamp?time(item.stamp):item.date||snapshot;');
   const cardStart = js.indexOf('  function newsCard(');
   const archiveStart = js.indexOf('  function drawNewsArchive(', cardStart);
   if (cardStart < 0 || archiveStart < 0) throw new Error('News cards integration point unavailable');
@@ -141,7 +144,7 @@ export function patchNews(js, replace) {
     '    const items=readable.filter(item=>',
   ].join('\n'));
   edit('[item.title,item.summary,item.titleEn,item.summaryEn,item.kind].some(value=>value?.toLowerCase().includes(word))',
-    '[item.title,item.summary,item.titleEn,item.summaryEn,item.kind,...(newsExtras.notes[item.id]?.fullTextZh||[]),'+
+    '[item.title,item.summary,item.titleEn,item.summaryEn,item.kind,item.source,...(newsExtras.notes[item.id]?.fullTextZh||[]),'+
     '...(newsExtras.notes[item.id]?.fullTextEn||[])].some(value=>value?.toLowerCase().includes(word))');
   const archiveBodyStart = js.indexOf('  function drawNewsArchive(');
   const archiveBodyEnd = js.indexOf('  function newsMonth(', archiveBodyStart);

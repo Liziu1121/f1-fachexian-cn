@@ -146,8 +146,9 @@ export async function liveNews(session, now, feed) {
 
 const fiaOrigin = 'https://www.fia.com';
 const fiaList = year => `${fiaOrigin}/documents/championships/110/${year}`;
-const fiaDocuments = cache(async year => {
-  const page = await request(fiaList(year)).then(response => response.text());
+const fiaIndex = cache(year => request(fiaList(year)).then(response => response.text()), 180_000, 4);
+
+function parseFiaDocuments(page) {
   return [...page.matchAll(/<li class="document-row\b[^>]*>([\s\S]*?)<\/li>/gi)].flatMap(([, row]) => {
     const path = row.match(/href="(\/system\/files\/decision-document\/[^"?]+\.pdf)"/i)?.[1];
     const title = xmlText(row.match(/<div class="title">([^<]+)<\/div>/i)?.[1] ?? '');
@@ -159,7 +160,24 @@ const fiaDocuments = cache(async year => {
     if (!Number.isFinite(date)) return [];
     return [{ title, date, url: `${fiaOrigin}${path}` }];
   });
-}, 180_000, 4);
+}
+
+const fiaDocuments = cache(async year => parseFiaDocuments(await fiaIndex(year)), 180_000, 4);
+
+export async function recentFiaDocuments(year) {
+  const page = await fiaIndex(year);
+  const active = xmlText(page.match(/class="event-title active">([^<]+)/i)?.[1] || '');
+  const past = [...page.matchAll(/href="\/decision-document-list\/nojs\/(\d+)"[^>]*class="event-title[^"]*"[^>]*>\s*([^<]+)/gi)]
+    .slice(0, 2).map(([, id, name]) => [id, xmlText(name)]);
+  const fromEvent = await Promise.allSettled(past.map(async ([id, event]) => {
+    const path = `${fiaOrigin}/decision-document-list/ajax/${id}`;
+    const data = await request(path).then(response => response.json());
+    return data.flatMap(block => typeof block.data === 'string' ? parseFiaDocuments(block.data) : [])
+      .map(item => ({ ...item, event }));
+  }));
+  return [...parseFiaDocuments(page).map(item => ({ ...item, event: active })),
+    ...fromEvent.flatMap(result => result.status === 'fulfilled' ? result.value : [])];
+}
 
 export async function fiaBulletins(session, sessions) {
   const year = new Date(session?.startsAt ?? Date.now()).getUTCFullYear();
