@@ -47,7 +47,21 @@ jobs:
     needs: build
     environment:
       name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url || steps.retry.outputs.page_url || steps.final_attempt.outputs.page_url }}
     steps:
       - uses: actions/deploy-pages@v5.0.1
         id: deployment
+        continue-on-error: true
+      - name: Wait before retrying Pages
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 15
+      - uses: actions/deploy-pages@v5.0.1
+        id: retry
+        if: steps.deployment.outcome == 'failure'
+        continue-on-error: true
+      - name: Wait for the final Pages attempt
+        if: steps.retry.outcome == 'failure'
+        run: sleep 45
+      - uses: actions/deploy-pages@v5.0.1
+        id: final_attempt
+        if: steps.retry.outcome == 'failure'
