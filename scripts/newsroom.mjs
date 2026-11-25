@@ -146,6 +146,188 @@ function practiceReport({ event, rows, top, earlier, en }) {
   return body;
 }
 
+const totalPoints = rows => rows.reduce((sum, row) => sum + (Number(row[6]) || 0), 0);
+const byTeam = rows => Object.groupBy(rows, row => row[3]);
+
+function teamWeekend({ teamRows, qualifying, grid, sprint, en, event, teamName }) {
+  const zhFinish = row => numeric(row[0]) ? `第 ${row[0]} 名` : result(statuses[row[5]] ? row[5] : row[0], false);
+  const enFinish = row => numeric(row[0]) ? `P${row[0]}` : result(statuses[row[5]] ? row[5] : row[0], true);
+  const [lead, other] = teamRows;
+  const points = totalPoints(teamRows);
+  const sprintPoints = totalPoints(sprint);
+  const body = [
+    local(en, `${teamName}在${event}正赛拿到 ${points} 分。${driver(lead, en)}的比赛结果为${zhFinish(lead)}，${driver(other, en)}的结果为${zhFinish(other)}。`,
+      `${teamName} scored ${points} points in the ${event}. ${driver(lead, en)} was recorded as ${enFinish(lead)} and ${driver(other, en)} as ${enFinish(other)}.`),
+  ];
+  const qualify = teamRows.map(row => qualifying.find(entry => entry[1] === row[1])).filter(entry => entry && numeric(entry[0]));
+  if (qualify.length) {
+    body.push(local(en,
+      `排位赛结果是${qualify.map(row => `${driver(row, en)}第 ${row[0]} 名`).join('、')}。发车位以最终发车表为准。`,
+      `The team’s recorded qualifying results were ${qualify.map(row => `${driver(row, en)} in P${row[0]}`).join(' and ')}. The final grid determines the actual starting positions.`));
+  }
+  const movements = teamRows.flatMap(row => {
+    const start = grid.find(entry => entry[1] === row[1]);
+    return numeric(row[0]) && numeric(start?.[0]) ? [{ row, start: start[0], end: row[0] }] : [];
+  });
+  if (movements.length) body.push(local(en,
+    `按最终发车表与正赛名次对照，${movements.map(({ row, start, end }) => `${driver(row, en)}从第 ${start} 位发车，完赛第 ${end} 名`).join('；')}。`,
+    `Comparing the final grid with the race classification, ${movements.map(({ row, start, end }) => `${driver(row, en)} started P${start} and finished P${end}`).join(', while ')}.`));
+  const finishes = teamRows.map(row => `${driver(row, en)}${en ? ': ' : ' '}${result(row[5], en)}`);
+  body.push(local(en,
+    `正赛计时栏记录为${finishes.join('、')}。两车分别计入 ${lead[4] || '0'} 圈和 ${other[4] || '0'} 圈。`,
+    `The race timing or status column records ${finishes.join(' and ')}. The two cars were credited with ${lead[4] || '0'} and ${other[4] || '0'} laps, respectively.`));
+  if (sprint.length) body.push(local(en,
+    `本站还进行了冲刺赛，${teamName}拿到 ${sprintPoints} 分，加上正赛后周末合计 ${points + sprintPoints} 分。`,
+    `The Sprint added ${sprintPoints} points, for a weekend total of ${sprintPoints + points} for ${teamName}.`));
+  return body;
+}
+
+function standingsStory(history, kind, en, event) {
+  const ranking = [...history.values()].sort((a, b) => b.points - a.points || b.wins - a.wins);
+  const [leader, runner, third] = ranking;
+  if (!third) return [];
+  const gap = leader.points - runner.points;
+  const label = kind === 'teams' ? local(en, '车队', 'constructors') : local(en, '车手', 'drivers');
+  const name = entry => en ? entry.en : entry.zh;
+  const top = ranking.slice(0, 3).map(entry => `${name(entry)} ${entry.points}`).join(en ? ', ' : '、');
+  const roundBest = [...history.values()].sort((a, b) => b.weekend - a.weekend)[0];
+  return [
+    local(en, `${event}结束后，赛事成绩记录中的${label}累计积分前三为${top}。`,
+      `After the ${event}, the leading totals in the ${label} points calculated from the session classifications were ${top}.`),
+    local(en, `榜首${name(leader)}与第二位${name(runner)}之间相差 ${gap} 分。这一差距按本季累计至本站的正赛和冲刺赛积分计算。`,
+      `${name(leader)} held a ${gap}-point gap to ${name(runner)} on the combined Grand Prix and Sprint results to this point in the season.`),
+    local(en, `本站${label}周末得分最高的是${name(roundBest)}，拿到 ${roundBest.weekend} 分。数据以场次成绩为基础，单独的积分裁决以正式积分榜为准。`,
+      `${name(roundBest)} posted the highest ${label} points haul this weekend with ${roundBest.weekend}. The calculation uses the classifications, and separate championship points decisions are reflected in the official standings.`),
+  ];
+}
+
+function updatePoints(tallies, sources, teamEntry) {
+  for (const entry of tallies.values()) entry.weekend = 0;
+  for (const [rows, mainRace] of sources) {
+    for (const row of rows) {
+      const key = teamEntry ? row[3] : row[1];
+      if (!key) continue;
+      const item = tallies.get(key) ?? { points: 0, weekend: 0, wins: 0,
+        en: teamEntry ? team(row, true) : driver(row, true), zh: teamEntry ? team(row, false) : driver(row, false) };
+      const points = Number(row[6]) || 0;
+      item.points += points;
+      item.weekend += points;
+      if (mainRace && row[0] === '1') item.wins += 1;
+      tallies.set(key, item);
+    }
+  }
+}
+
+function qualifyingMargin(rows, zh, en) {
+  const q2 = rows.filter(row => numeric(row[0]) && timed(row[5]));
+  const advanced = q2.filter(row => Number(row[0]) <= 10).sort((a, b) => lapSeconds(b[5]) - lapSeconds(a[5]));
+  const eliminated = q2.filter(row => Number(row[0]) > 10).sort((a, b) => lapSeconds(a[5]) - lapSeconds(b[5]));
+  const [last] = advanced, [first] = eliminated;
+  if (advanced.length !== 10 || !first) return null;
+  const gap = lapSeconds(first[5]) - lapSeconds(last[5]);
+  if (gap < 0.0009) return null;
+  const spread = gap.toFixed(3);
+  return {
+    titles: [`${zh}排位数据 · 晋级 Q3 的分界线是 ${spread} 秒`,
+      `${en} qualifying analysis: ${spread}s on the Q3 cut line`],
+    zh: [
+      `${zh}排位赛 Q2 的最后一个晋级圈速是 ${last[5]}，由${driver(last, false)}跑出。未能晋级的车手中，${driver(first, false)}最快，用时 ${first[5]}，两圈相差 ${spread} 秒。`,
+      `${driver(last, false)}代表${team(last, false)}，${driver(first, false)}效力于${team(first, false)}。这里比较的是两人在同一节排位赛的圈速，晋级后车手的最终排位还取决于 Q3 的成绩。`,
+      `成绩表中有 ${q2.length} 名车手录得可比较的 Q2 圈速，其中 ${advanced.length} 人在最终排位成绩中列入前十。实际发车位还可能因赛后裁决发生变化。`,
+    ],
+    en: [
+      `The cutoff for Q3 at the ${en} was ${last[5]}, set by ${driver(last, true)}. ${driver(first, true)} led the drivers knocked out in Q2 with a ${first[5]}, a difference of ${spread} seconds.`,
+      `${driver(last, true)} drove for ${team(last, true)}, with ${driver(first, true)} representing ${team(first, true)}. The comparison uses laps from the same segment. Final qualifying positions for those who advanced were decided in Q3.`,
+      `The classification lists ${q2.length} drivers with comparable Q2 laps, including ${advanced.length} in the final top ten. Grid penalties can still change the starting order.`,
+    ],
+  };
+}
+
+function driverPhase(races, en, phase) {
+  const period = phase === 'first' ? local(en, '赛季前半程', 'first half of the season') :
+    local(en, '赛季下半程至今', 'second half of the season so far');
+  const resultByDriver = new Map();
+  for (const race of races) for (const row of race.rows) {
+    if (!row[1]) continue;
+    const entry = resultByDriver.get(row[1]) || [];
+    const sprint = race.sprint.find(candidate => row[1] === candidate[1]);
+    entry.push({ ...race, row, sprint });
+    resultByDriver.set(row[1], entry);
+  }
+  const articles = [];
+  for (const [number, entries] of resultByDriver) {
+    const starts = entries.filter(({ row }) => row[0] !== 'DNS' && row[5] !== 'DNS');
+    if (starts.length < 4) continue;
+    const first = starts[0], last = starts.at(-1);
+    const name = driver(last.row, en);
+    const racesScored = starts.filter(({ row }) => Number(row[6]) > 0).length;
+    const points = totalPoints(starts.map(entry => entry.row));
+    const sprintPoints = totalPoints(entries.flatMap(entry => entry.sprint ? [entry.sprint] : []));
+    const placed = starts.filter(({ row }) => numeric(row[0])).sort((a, b) => Number(a.row[0]) - Number(b.row[0]));
+    const best = placed[0], podiums = placed.filter(({ row }) => Number(row[0]) <= 3).length;
+    if (!best) continue;
+    const zhName = driver(last.row, false);
+    const laps = starts.reduce((sum, { row }) => sum + (Number(row[4]) || 0), 0);
+    const range = `${first[en ? 'en' : 'zh']}${en ? ' to ' : '至'}${last[en ? 'en' : 'zh']}`;
+    articles.push({
+      number,
+      title: local(en, `${zhName}${period} · ${starts.length} 次发车、${points + sprintPoints} 分`, `${name}: ${points + sprintPoints} points in the ${period}`),
+      paragraphs: [
+        local(en, `${zhName}在${period}从${range}共 ${starts.length} 次正赛发车。正赛累积 ${points} 分，冲刺赛另得 ${sprintPoints} 分。`,
+          `${name} started ${starts.length} Grands Prix in the ${period}, from the ${range}. The driver scored ${points} Grand Prix points and a further ${sprintPoints} in Sprints.`),
+        local(en, `这一阶段的最好正赛名次是${best.zh}的第 ${best.row[0]} 名。${zhName}共 ${racesScored} 场正赛得分，${podiums} 次站上领奖台。`,
+          `The best race result was P${best.row[0]} at the ${best.en}. ${name} scored in ${racesScored} Grands Prix and finished on the podium ${podiums} times.`),
+        local(en, `各场正赛成绩表合计记入 ${laps} 圈。这一阶段最后一次发车是在${last.zh}，成绩为${numeric(last.row[0]) ? `第 ${last.row[0]} 名` : result(last.row[5] || last.row[0], en)}。`,
+          `Race classifications credit the driver with ${laps} laps across these starts. The last one in this period was the ${last.en}, where the classification records ${numeric(last.row[0]) ? `P${last.row[0]}` : result(last.row[5] || last.row[0], en)}.`),
+      ],
+    });
+  }
+  return articles;
+}
+
+function constructorPhase(rounds, phase) {
+  const data = new Map();
+  for (const race of rounds) for (const [name, rows] of Object.entries(byTeam(race.rows))) {
+    const stats = data.get(name) ?? { name, zh: team(rows[0], false), races: [], teammates: new Map(), podiums: 0, main: 0, sprint: 0 };
+    const sprint = race.sprint.filter(row => row[3] === name);
+    const mainPoints = totalPoints(rows), sprintPoints = totalPoints(sprint);
+    stats.races.push({ ...race, points: mainPoints + sprintPoints });
+    stats.main += mainPoints;
+    stats.sprint += sprintPoints;
+    stats.podiums += rows.filter(row => numeric(row[0]) && Number(row[0]) <= 3).length;
+    for (const row of [...rows, ...sprint]) {
+      const scorer = stats.teammates.get(row[1]) ?? { zh: driver(row, false), en: driver(row, true), points: 0 };
+      scorer.points += Number(row[6]) || 0;
+      stats.teammates.set(row[1], scorer);
+    }
+    data.set(name, stats);
+  }
+  const zhPeriod = phase === 'first' ? '赛季前半程' : '赛季下半程至今';
+  const enPeriod = phase === 'first' ? 'the first half of the season' : 'the second half of the season so far';
+  return [...data.values()].map(stats => {
+    const { name, zh, races, teammates, main, sprint, podiums } = stats;
+    const ordered = [...teammates.values()].sort((a, b) => b.points - a.points);
+    const high = [...races].sort((a, b) => b.points - a.points)[0];
+    const positive = races.filter(race => race.points > 0).length;
+    const bestZh = high.points ? `单站最高积分出现在${high.zh}，拿到 ${high.points} 分。` : '这段赛程没有单站积分入账。';
+    const bestEn = high.points ? `The best round was the ${high.en}, with ${high.points} points.` : 'The team did not score at any of these rounds.';
+    return {
+      slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      titles: [`${zh}${zhPeriod} · ${main + sprint} 分来自哪些场次`, `${name}: where its ${main + sprint} points came from in ${enPeriod}`],
+      zh: [
+        `${zh}在${zhPeriod}的 ${races.length} 个分站中，正赛累计获得 ${main} 分，冲刺赛累计获得 ${sprint} 分，合计 ${main + sprint} 分。`,
+        `其中有 ${positive} 站得分，车手共获得 ${podiums} 个正赛领奖台。${bestZh}`,
+        `按场次成绩计算，这段赛程的队内得分分布为${ordered.map(row => `${row.zh} ${row.points} 分`).join('、')}。这组数字包含冲刺赛得分。`,
+      ],
+      en: [
+        `${name} scored ${main} points in Grands Prix and ${sprint} in Sprints across ${races.length} rounds in ${enPeriod}, for a combined total of ${main + sprint}.`,
+        `The team scored at ${positive} rounds, with ${podiums} Grand Prix podium finishes. ${bestEn}`,
+        `Including Sprints, the points contribution from each driver was ${ordered.map(row => `${row.en} ${row.points}`).join(', ')}.`,
+      ],
+    };
+  });
+}
+
 async function resultsFor(site, round, kind, fallback = []) {
   try {
     const snapshot = JSON.parse(await readFile(join(site, 'api', 'results', round, kind + '.json'), 'utf8'));
@@ -176,6 +358,8 @@ export async function writeReports(site, media, now = Date.now()) {
     items.push([id, new Date(stamp).toISOString(), titles[1], '', kind, cover, { title: titles[0] }, { source: 'F1 发车线' }]);
   }
 
+  const teamPoints = new Map(), driverPoints = new Map();
+  const completedRaces = [];
   for (const [key, race] of races) {
     const zh = names[key] + '大奖赛';
     const en = (englishNames[key] || key.replace(/(^|-)([a-z])/g, (_, separator, letter) =>
@@ -246,6 +430,51 @@ export async function writeReports(site, media, now = Date.now()) {
       add(kind === 'race' ? 'report-' + key : `report-${key}-${kind}`, Date.parse(stamp),
         [`${zhEvent} · ${driver(top[0], false)}${zhResult}`, enTitle], zhText, enText, key, category,
         { zh: classification(rows, kind, false), en: classification(rows, kind, true) });
+    }
+    if (!notes['report-' + key]) continue;
+    const resultRows = byKind.race.filter(row => row.length >= 7 && typeof row[2] === 'string');
+    const sprintRows = (byKind.sprint || []).filter(row => row.length >= 7 && typeof row[2] === 'string');
+    completedRaces.push({ key, stamp: end, zh, en, rows: resultRows, sprint: sprintRows });
+    const cutoff = qualifyingMargin(byKind.q || [], zh, en);
+    if (cutoff) add('q3-cut-' + key, Date.parse(race.sessions.q), cutoff.titles, cutoff.zh, cutoff.en, key, '排位数据');
+    const teamSprints = byTeam(sprintRows);
+    for (const [name, teamRows] of Object.entries(byTeam(resultRows))) {
+      if (teamRows.length !== 2) continue;
+      const teamNameZh = team(teamRows[0], false);
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const points = totalPoints(teamRows) + totalPoints(teamSprints[name] || []);
+      const report = { teamRows, grid: byKind.grid, qualifying: byKind.q || [], sprint: teamSprints[name] || [] };
+      add(`team-${key}-${slug}`, end, [
+        `${teamNameZh}${zh}复盘 · ${points ? `全站 ${points} 分` : '未获积分'}`,
+        `${name} at the ${en}: ${points ? `${points} weekend points` : 'outside the points'}`,
+      ], teamWeekend({ ...report, en: false, event: zh, teamName: teamNameZh }),
+      teamWeekend({ ...report, en: true, event: en, teamName: name }), key, '车队复盘');
+    }
+    updatePoints(driverPoints, [[resultRows, true], [sprintRows, false]], false);
+    updatePoints(teamPoints, [[resultRows, true], [sprintRows, false]], true);
+    for (const [type, tallies] of [['drivers', driverPoints], ['teams', teamPoints]]) {
+      const zhText = standingsStory(tallies, type, false, zh);
+      const enText = standingsStory(tallies, type, true, en);
+      if (!zhText.length || !enText.length) continue;
+      const zhLabel = type === 'teams' ? '车队' : '车手';
+      const enLabel = type === 'teams' ? 'constructors’' : 'drivers’';
+      add(`points-${key}-${type}`, end, [`${zh}后${zhLabel}积分盘点`, `The ${enLabel} points picture after the ${en}`],
+        zhText, enText, key, '积分形势');
+    }
+  }
+  const midpoint = Date.parse(races[Math.floor(races.length / 2)]?.[1].sessions.race);
+  const phases = [['first', completedRaces.filter(race => race.stamp < midpoint)],
+    ['second', completedRaces.filter(race => race.stamp >= midpoint)]];
+  for (const [phase, rounds] of phases) {
+    if (rounds.length < 4) continue;
+    const { key, stamp } = rounds.at(-1);
+    for (const report of constructorPhase(rounds, phase)) {
+      add(`constructor-${phase}-${report.slug}`, stamp, report.titles, report.zh, report.en, key, '车队赛季追踪');
+    }
+    const english = new Map(driverPhase(rounds, true, phase).map(article => [article.number, article]));
+    for (const zh of driverPhase(rounds, false, phase)) {
+      const en = english.get(zh.number);
+      add(`driver-${phase}-${zh.number}`, stamp, [zh.title, en.title], zh.paragraphs, en.paragraphs, key, '车手赛季追踪');
     }
   }
   return { items, notes };

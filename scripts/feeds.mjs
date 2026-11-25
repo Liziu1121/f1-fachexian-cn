@@ -151,7 +151,7 @@ const fiaIndex = cache(year => request(fiaList(year)).then(response => response.
 function parseFiaDocuments(page) {
   return [...page.matchAll(/<li class="document-row\b[^>]*>([\s\S]*?)<\/li>/gi)].flatMap(([, row]) => {
     const path = row.match(/href="(\/system\/files\/decision-document\/[^"?]+\.pdf)"/i)?.[1];
-    const title = xmlText(row.match(/<div class="title">([^<]+)<\/div>/i)?.[1] ?? '');
+    const title = xmlText((row.match(/<div class="title">([\s\S]*?)<\/div>/i)?.[1] ?? '').replace(/<[^>]*>/g, ''));
     const published = row.match(/class="date-display-single"[^>]*>(\d{2})\.(\d{2})\.(\d{2}) (\d{2}):(\d{2})<\/span>\s*(CET|CEST)\b/i);
     if (!path || !title || !published) return [];
     const [, day, month, shortYear, hour, minute, zone] = published;
@@ -164,19 +164,23 @@ function parseFiaDocuments(page) {
 
 const fiaDocuments = cache(async year => parseFiaDocuments(await fiaIndex(year)), 180_000, 4);
 
-export async function recentFiaDocuments(year) {
+export async function recentFiaDocuments(year, eventLimit = 2) {
   const page = await fiaIndex(year);
   const active = xmlText(page.match(/class="event-title active">([^<]+)/i)?.[1] || '');
   const past = [...page.matchAll(/href="\/decision-document-list\/nojs\/(\d+)"[^>]*class="event-title[^"]*"[^>]*>\s*([^<]+)/gi)]
-    .slice(0, 2).map(([, id, name]) => [id, xmlText(name)]);
-  const fromEvent = await Promise.allSettled(past.map(async ([id, event]) => {
-    const path = `${fiaOrigin}/decision-document-list/ajax/${id}`;
-    const data = await request(path).then(response => response.json());
-    return data.flatMap(block => typeof block.data === 'string' ? parseFiaDocuments(block.data) : [])
-      .map(item => ({ ...item, event }));
-  }));
-  return [...parseFiaDocuments(page).map(item => ({ ...item, event: active })),
-    ...fromEvent.flatMap(result => result.status === 'fulfilled' ? result.value : [])];
+    .map(([, id, name]) => [id, xmlText(name)]).filter(([, name]) => /Grand Prix$/i.test(name));
+  const events = [...new Map([...past].reverse().map(([id, name]) => [name, id])).entries()].reverse().slice(0, eventLimit);
+  const documents = parseFiaDocuments(page).map(item => ({ ...item, event: active }));
+  for (let start = 0; start < events.length; start += 5) {
+    const batch = await Promise.allSettled(events.slice(start, start + 5).map(async ([event, id]) => {
+      const path = `${fiaOrigin}/decision-document-list/ajax/${id}`;
+      const data = await request(path, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' } }).then(response => response.json());
+      return data.flatMap(block => typeof block.data === 'string' ? parseFiaDocuments(block.data) : [])
+        .map(item => ({ ...item, event }));
+    }));
+    documents.push(...batch.flatMap(result => result.status === 'fulfilled' ? result.value : []));
+  }
+  return [...new Map(documents.map(doc => [doc.url, doc])).values()];
 }
 
 export async function fiaBulletins(session, sessions) {

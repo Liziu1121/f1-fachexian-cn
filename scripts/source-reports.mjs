@@ -125,7 +125,7 @@ export function fiaCase(document, pdf) {
 }
 
 async function readDecision(doc, cacheDir) {
-  const bytes = Buffer.from(await request(doc.url).then(response => response.arrayBuffer()));
+  const bytes = Buffer.from(await request(doc.url, { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/pdf' } }).then(response => response.arrayBuffer()));
   if (bytes.length > 4 * 1024 * 1024 || bytes.subarray(0, 5).toString() !== '%PDF-') return null;
   const file = join(cacheDir, hash(doc.url) + '.pdf');
   await writeFile(file, bytes);
@@ -133,9 +133,9 @@ async function readDecision(doc, cacheDir) {
   finally { await rm(file, { force: true }); }
 }
 
-async function recentCases(cacheDir, now) {
+async function recentCases(cacheDir, now, seeded) {
   const path = join(cacheDir, 'fia-news-cases.json');
-  const saved = await readFile(path, 'utf8').then(JSON.parse).catch(() => ({}));
+  const saved = { ...seeded, ...await readFile(path, 'utf8').then(JSON.parse).catch(() => ({})) };
   const year = new Date(now).getUTCFullYear();
   const cutoff = Date.UTC(year, 0, 1);
   const docs = await recentFiaDocuments(year).catch(error => {
@@ -152,14 +152,18 @@ async function recentCases(cacheDir, now) {
     }));
   }
   if (pending.length) await writeFile(path, JSON.stringify(saved) + '\n');
-  return Object.values(saved).filter(item => item && Date.parse(item.date) >= cutoff);
+  return Object.values(saved).filter(Boolean);
 }
 
 export async function sourceReports(root, cacheDir, media, now = Date.now()) {
   await mkdir(cacheDir, { recursive: true });
+  const archive = await readFile(join(root, 'content', 'fia-news-archive.json'), 'utf8').then(JSON.parse, error => {
+    if (error.code === 'ENOENT') return {};
+    throw error;
+  });
   const [briefings, cases] = await Promise.all([
     readFile(join(root, 'content', 'source-reports.json'), 'utf8').then(JSON.parse),
-    recentCases(cacheDir, now),
+    recentCases(cacheDir, now, archive),
   ]);
   const notes = {};
   const items = [...briefings, ...cases].filter(report => Date.parse(report.date) <= now).map(report => {
