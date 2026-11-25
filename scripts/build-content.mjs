@@ -86,7 +86,9 @@ async function buildVideos({ root, site, cacheDir, window }) {
   const officialRow = row => Array.isArray(row) && biliId.test(row[0]) &&
     Number.isFinite(Date.parse(row[1])) && Date.parse(row[1]) <= Date.now() && typeof row[3] === 'string';
   const published = new Map([...seed, ...(previous.items || [])].filter(officialRow).map(row => [row[0], row]));
-  if (previous.window === window && previous.sourceVersion === 2) return { ...previous, items: [...published.values()] };
+  if (previous.window === window && previous.sourceVersion === 2 && previous.status === 'public-list') {
+    return { ...previous, items: [...published.values()].sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).slice(0, 80) };
+  }
   const rows = await latestBilibili();
   for (const row of rows) published.set(row[0], row);
   const candidates = (incoming.items ?? []).filter(officialRow).slice(0, 20);

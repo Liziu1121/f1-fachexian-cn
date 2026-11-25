@@ -47,7 +47,13 @@ export async function latestBilibili(now = Date.now()) {
       .filter(account => Number(account.mid) === biliAccount).flatMap(account => account.res || [])),
   ];
   const results = await Promise.allSettled(jobs);
-  return [...new Map(results.flatMap(result => result.status === 'fulfilled' ? result.value : [])
+  const endpointNames = ['latest uploads search', 'account search'];
+  const candidates = results.flatMap((result, index) => {
+    if (result.status === 'fulfilled') return result.value;
+    console.warn(`Bilibili ${endpointNames[index]}: ${result.reason.message}`);
+    return [];
+  });
+  return [...new Map(candidates
     .map(item => normalizeBilibili(item, now)).filter(Boolean).map(row => [row[0], row])).values()]
     .sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
 }
