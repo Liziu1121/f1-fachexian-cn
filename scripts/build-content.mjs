@@ -270,6 +270,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   }).sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
   const feed = { ...externalNews, items: originalItems, leadId: originalItems.find(row => row[7].onSite)?.[0] };
   await writeJson(join(site, 'api', 'news', 'latest.json'), feed);
+  await mkdir(join(site, 'api', 'videos'), { recursive: true });
   await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, douyin: douyin.items, douyinStatus });
   const patch = async (asset, transform) => {
     const path = join(site, asset);
