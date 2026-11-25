@@ -29,8 +29,8 @@ python -m http.server 4175 --bind 127.0.0.1 --directory public
 
 ## 新闻和视频
 
-- 发布流程每三个小时检查 F1、Sky Sports、Motorsport.com、Autosport 和视频来源，新内容随当次构建上线。新闻中心显示具备站内正文的条目，包含按赛季数据整理的中英文分站赛报和前瞻。第三方全文获得授权后可以加入。授权全文可用 `content/news-notes.json` 条目内的 `fullTextZh` 和 `fullTextEn` 段落列表录入。首条新闻优先展示近期被多家来源报道的话题，视频使用发布时间和可获得的观看数排序。
-- 视频来源仅为哔哩哔哩及抖音官号。两个来源每三小时检查一次。抖音官号未公开最新清单时，继续显示已核验的归档。
+- 发布流程每三个小时检查 F1、Sky Sports、Motorsport.com、Autosport 和视频来源，新内容随当次构建上线。新闻中心显示具备站内正文的条目，包含按赛季数据整理的中英文分站赛报和前瞻。已获站内刊登及翻译授权的第三方全文可放入 `content/licensed-news.json`，每篇提供唯一的 `id`、`source`（F1、Sky Sports 或 Motorsport.com）、`published`（ISO 8601）、`titleZh`、`titleEn`，以及保存完整段落的 `fullTextZh` 和 `fullTextEn` 数组。导入独立于近期 RSS 清单，可批量刊登历史文章。首条新闻优先展示近期被多家来源报道的话题，视频使用发布时间和可获得的观看数排序。
+- 视频来源仅为哔哩哔哩及抖音官号。两个来源每三小时检查一次。哔哩哔哩从公开搜索检查最新投稿，按官号 UID 296086460 核验并按 BV 号去重。公开列表暂不可用时保留此前已核验的视频。
 
 ## 规则查询
 

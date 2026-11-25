@@ -65,7 +65,14 @@ with ThreadPoolExecutor(max_workers=4) as pool:
     except (OSError, ValueError, TypeError, KeyError):
         refresh_edition = True
     if refresh_edition:
-        apis += ['news/latest', 'videos/mainland']
+        apis += ['news/latest']
+    try:
+        video = json.loads(Path('.live-cache/official-video.json').read_text(encoding='utf-8'))
+        refresh_video = (int(datetime.now(timezone.utc).timestamp() // 10800) != video['window'] or video.get('sourceVersion') != 2)
+    except (OSError, ValueError, TypeError, KeyError):
+        refresh_video = True
+    if refresh_video:
+        apis += ['videos/mainland']
     data = (output / 'data.js').read_text(encoding='utf-8').split('=', 1)[1].lstrip()
     races = json.JSONDecoder().raw_decode(data)[0]['races']
     now = datetime.now(timezone.utc)

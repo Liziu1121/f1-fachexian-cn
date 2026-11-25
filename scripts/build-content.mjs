@@ -3,12 +3,11 @@ import { join } from 'node:path';
 import { officialArticleUrl, officialNewsLinks, request, xmlText } from './feeds.mjs';
 import { circuitMedia, refreshEdition } from './edition.mjs';
 import { patchHeroPhoto } from './home-photo.mjs';
+import { biliAccount, biliId, latestBilibili } from './bilibili-feed.mjs';
 import { recentDouyin } from './douyin-feed.mjs';
 import { writeReports } from './newsroom.mjs';
 import { patchNews } from './news-overlay.mjs';
 
-const biliAccount = 296086460;
-const biliId = /^BV[1-9A-HJ-NP-Za-km-z0-9]{10}$/;
 const han = value => typeof value === 'string' && /\p{Script=Han}/u.test(value);
 const json = async (path, fallback) => {
   try { return JSON.parse(await readFile(path, 'utf8')); }
@@ -78,23 +77,35 @@ async function verifiedVideo(id) {
   }
 }
 
-async function buildVideos(site, cacheDir, refresh) {
+async function buildVideos({ root, site, cacheDir, window }) {
   const target = join(site, 'api', 'videos', 'mainland.json');
   const cachePath = join(cacheDir, 'official-video.json');
-  const [incoming, previous] = await Promise.all([json(target, {}), json(cachePath, {})]);
-  const official = new Map((previous.items ?? []).map(row => [row[0], row]));
-  const candidates = (refresh || !previous.items ? incoming.items ?? [] : []).filter(row =>
-    Array.isArray(row) && biliId.test(row[0]) && Number.isFinite(Date.parse(row[1])) && typeof row[3] === 'string');
-  for (let i = 0; i < Math.min(candidates.length, 20); i += 4) {
+  const [incoming, previous, seed] = await Promise.all([
+    json(target, {}), json(cachePath, {}), json(join(root, 'content', 'bilibili-backfill.json'), []),
+  ]);
+  const officialRow = row => Array.isArray(row) && biliId.test(row[0]) &&
+    Number.isFinite(Date.parse(row[1])) && Date.parse(row[1]) <= Date.now() && typeof row[3] === 'string';
+  const published = new Map([...seed, ...(previous.items || [])].filter(officialRow).map(row => [row[0], row]));
+  if (previous.window === window && previous.sourceVersion === 2) return { ...previous, items: [...published.values()] };
+  const rows = await latestBilibili();
+  for (const row of rows) published.set(row[0], row);
+  const candidates = (incoming.items ?? []).filter(officialRow).slice(0, 20);
+  let seen = rows.length;
+  for (let i = 0; i < candidates.length; i += 4) {
     await Promise.all(candidates.slice(i, i + 4).map(async row => {
-      if (official.has(row[0]) || await verifiedVideo(row[0])) official.set(row[0], row);
+      if (!published.has(row[0]) && !(await verifiedVideo(row[0]))) return;
+      if (!published.has(row[0])) published.set(row[0], row);
+      seen += 1;
     }));
   }
+  const items = [...published.values()].sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).slice(0, 80);
+  const now = new Date().toISOString();
   const data = {
-    status: refresh ? (candidates.length && incoming.live !== false ? 'public-list' : 'archive') : previous.status || 'archive',
-    items: [...official.values()].sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).slice(0, 80),
+    window, sourceVersion: 2, checkedAt: now,
+    verifiedAt: seen ? now : previous.verifiedAt ?? null,
+    status: seen ? 'public-list' : 'archive', items,
   };
-  await mkdir(join(site, 'api', 'videos'), { recursive: true });
+  console.log(`Bilibili: ${rows.length} items from public search, ${items.length} validated items ready for publication.`);
   await writeJson(cachePath, data);
   return data;
 }
@@ -170,6 +181,8 @@ function patchVideo(js, replace) {
     '    const score=row=>Math.log10(1+Math.max(0,Number(row[7])||0))*10-(Date.now()-Date.parse(row[1]))/3600000;',
     '    const lead=latest.sort((a,b)=>score(b)-score(a))[0]||newest[0];',
   ].join('\n'));
+  js = replace(js, '  window.F1_VIDEOS={',
+    '  insert((window.F1_CONTENT_EXTRAS.biliItems||[]).filter(row=>hasBilibili(row[0])));\n  window.F1_VIDEOS={');
   return js;
 }
 
@@ -187,8 +200,36 @@ function patchIndex(index, replace) {
   return replace(index, '          <button class="action" type="button" id="videoSwitch" hidden></button>\n', '');
 }
 
+const licensedPublishers = new Set(['F1', 'Sky Sports', 'Motorsport.com']);
+const fullText = paragraphs => Array.isArray(paragraphs) && paragraphs.length > 0 &&
+  paragraphs.every(paragraph => typeof paragraph === 'string' && paragraph.trim());
+
+export function licensedNews(articles, now = Date.now()) {
+  const notes = Object.create(null);
+  if (!Array.isArray(articles)) throw new Error('The licensed news archive must be a list of articles.');
+  const items = articles.map(article => {
+    const { id, source, published, titleZh, titleEn, fullTextZh, fullTextEn } = article;
+    const stamp = Date.parse(published);
+    const key = `licensed-${id}`;
+    if (typeof id !== 'string' || !/^[a-z0-9][a-z0-9-]{0,95}$/.test(id) || notes[key] ||
+        !licensedPublishers.has(source) || !Number.isFinite(stamp) || stamp > now ||
+        !han(titleZh) || typeof titleEn !== 'string' || !titleEn.trim() ||
+        !fullText(fullTextZh) || !fullText(fullTextEn)) {
+      throw new Error(`Invalid licensed news article: ${key}`);
+    }
+    notes[key] = { title: titleZh, fullTextZh, fullTextEn };
+    return [key, new Date(stamp).toISOString(), titleEn, '', 'news', '', { title: titleZh }, { source }];
+  });
+  return { items, notes };
+}
+
 export async function installContent({ root, site, cacheDir, replaceOnce }) {
   const notes = await json(join(root, 'content', 'news-notes.json'), {});
+  const licensed = licensedNews(await readFile(join(root, 'content', 'licensed-news.json'), 'utf8')
+    .then(JSON.parse, error => {
+      if (error.code !== 'ENOENT') throw error;
+      return [];
+    }));
   const douyin = await json(join(root, 'content', 'douyin-2026.json'), null);
   if (!douyin || !/^https:\/\/www\.douyin\.com\/user\/[\w-]+$/.test(douyin.profile)) {
     throw new Error('The official Douyin account is missing from the archive.');
@@ -203,7 +244,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   const refreshVideos = previous.window !== window;
   const [media, videos, discovered] = await Promise.all([
     circuitMedia(site, cacheDir),
-    buildVideos(site, cacheDir, refreshVideos),
+    buildVideos({ root, site, cacheDir, window }),
     refreshVideos ? recentDouyin(douyin.profile).catch(() => []) : previous.items,
   ]);
   const douyinStatus = refreshVideos ? discovered.length > 0 ? 'public-list' : 'archive' : previous.status;
@@ -218,14 +259,14 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
     .sort((a, b) => Date.parse(b.stamp) - Date.parse(a.stamp));
   const externalNews = await buildNews(site, cacheDir, notes, edition);
   const editorial = await writeReports(site, media);
-  Object.assign(notes, editorial.notes);
-  const originalItems = [...editorial.items, ...externalNews.items].map(row => {
+  Object.assign(notes, editorial.notes, licensed.notes);
+  const originalItems = [...editorial.items, ...licensed.items, ...externalNews.items].map(row => {
     const note = notes[row[0]];
     const onSite = Boolean((note?.fullTextZh?.length || note?.body?.length) &&
       (note?.fullTextEn?.length || note?.bodyEn?.length));
     return [...row.slice(0, 7), { ...row[7], onSite }];
   }).sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
-  const feed = { ...externalNews, items: originalItems, leadId: editorial.items.sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]))[0]?.[0] };
+  const feed = { ...externalNews, items: originalItems, leadId: originalItems.find(row => row[7].onSite)?.[0] };
   await writeJson(join(site, 'api', 'news', 'latest.json'), feed);
   await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, douyin: douyin.items, douyinStatus });
   const patch = async (asset, transform) => {
@@ -237,7 +278,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
     patch('app.js', (js, replace) => patchHeroPhoto(patchNews(js, replace))),
     patch('video.js', patchVideo),
     patch('index.html', (html, replace) => patchIndex(html, replace)),
-    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliStatus: videos.status, feed, notes, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
+    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliItems: videos.items, biliStatus: videos.status, feed, notes, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
   ]);
   console.log('Content ready: ' + feed.items.length + ' recent news items, ' + douyin.items.length + ' verified Douyin videos.');
   return feed;
