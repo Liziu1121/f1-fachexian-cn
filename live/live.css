@@ -199,3 +199,20 @@ body:has(#liveMapDialog[open]) { overflow: hidden; }
 .regulation-reader iframe { width: 100%; height: 66dvh; border: 0; }
 #ruleList > h2 { margin-top: 18px; }
 .regulation-translated { max-width: 74ch; white-space: pre-wrap; line-height: 1.8; margin-inline: auto; padding: 8px; }
+
+
+/* The archive uses compact covers so the headline remains the focus. */
+#news #newsList .news-card:has(> .news-visual:not(.photo-unavailable)) {
+  display:grid;
+  grid-template-columns:minmax(92px, 36%) minmax(0,1fr);
+  align-items:center;
+}
+#news #newsList .news-visual {
+  margin:10px 0 10px 10px;
+  aspect-ratio:4/3;
+  border-radius:6px;
+}
+#news #newsList .news-card-copy { padding:12px; }
+#news #newsList .news-card h2 { font-size:clamp(.94rem, 1.55vw, 1.15rem); }
+#news .news-visual.photo-unavailable, #news .news-detail figure.photo-unavailable { display:none; }
+#news .news-lead:has(.photo-unavailable) { grid-template-columns:1fr; }

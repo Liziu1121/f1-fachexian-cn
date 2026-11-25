@@ -170,7 +170,7 @@ export async function sourceReports(root, cacheDir, media, now = Date.now()) {
     const { id, date, round, source, titleZh, titleEn, fullTextZh, fullTextEn } = report;
     notes[id] = { title: titleZh, fullTextZh, fullTextEn };
     return [id, new Date(date).toISOString(), titleEn, '', source === 'FIA' ? '赛事公告与裁决' : '车队与技术动态',
-      media[round]?.photos?.[0]?.image || '', { title: titleZh }, { source, dateOnly: /^\d{4}-\d{2}-\d{2}$/.test(date) }];
+      media[round]?.photos?.[0]?.image || '', { title: titleZh }, { source, round, dateOnly: /^\d{4}-\d{2}-\d{2}$/.test(date) }];
   });
   console.log(`Newsroom: ${briefings.length} source-based articles, ${cases.length} verified FIA decisions.`);
   return { items, notes };

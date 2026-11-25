@@ -41,6 +41,12 @@ export function patchNews(js, replace) {
     '      }',
     '      if (info?.source) article.source=info.source;',
     '      if (info?.dateOnly) article.dateOnly=true;',
+    '      if (info?.photoReference && image) {',
+    '        if (article.image!==image || !article.photoReference) changed.add(id);',
+    '        article.image=image;',
+    '        article.photoReference=true;',
+    '        article.photoArchived=info.photoArchived;',
+    '      }',
     '      if (info?.url && article.sourceUrl!==info.url) {',
     '        article.sourceUrl=info.url;',
     '        changed.add(id);',
@@ -98,6 +104,9 @@ export function patchNews(js, replace) {
     '  }');
   edit('return item.stamp?time(item.stamp):item.date||snapshot;',
     'return item.dateOnly?new Intl.DateTimeFormat(window.F1_LOCALE.english()?"en-GB":"zh-CN",{month:"long",day:"numeric",timeZone:"UTC"}).format(new Date(item.stamp)):item.stamp?time(item.stamp):item.date||snapshot;');
+  edit('    const src=item.archived?item.image:photoBase+"c_fit,w_"+width+"/q_auto/v1740000001/"+item.image;',
+    '    const src=item.photoReference?item.image.replace("/c_fit,w_1600/","/c_fit,w_"+width+"/"):'+
+    'item.archived?item.image:photoBase+"c_fit,w_"+width+"/q_auto/v1740000001/"+item.image;');
   const cardStart = js.indexOf('  function newsCard(');
   const archiveStart = js.indexOf('  function drawNewsArchive(', cardStart);
   if (cardStart < 0 || archiveStart < 0) throw new Error('News cards integration point unavailable');
@@ -131,7 +140,7 @@ export function patchNews(js, replace) {
     const available=hasNewsBody(item,en);
     const label=available?(en?"Read on this site":"站内阅读"):(en?"Full text unavailable":"暂无站内全文");
     return '<article class="news-card'+(lead?' news-lead':'')+'">'+
-      (cover&&item.image?'<div class="news-visual">'+newsCover(item,lead?1100:700,!lead)+'</div>':'')+
+      (cover&&item.image?'<div class="news-visual">'+newsCover(item,lead?1200:cover==="thumb"?480:760,!lead)+'</div>':'')+
       '<div class="news-card-copy"><div class="race-kicker">'+safe(item.source||"F1")+" · "+safe(newsDate(item))+'</div><h2>'+
       '<button class="news-title-button" type="button" data-news-entry="'+safe(item.id)+'">'+safe(title)+'</button></h2>'+
       '<span class="sub">'+label+'</span></div></article>';
@@ -146,6 +155,7 @@ export function patchNews(js, replace) {
   edit('[item.title,item.summary,item.titleEn,item.summaryEn,item.kind].some(value=>value?.toLowerCase().includes(word))',
     '[item.title,item.summary,item.titleEn,item.summaryEn,item.kind,item.source,...(newsExtras.notes[item.id]?.fullTextZh||[]),'+
     '...(newsExtras.notes[item.id]?.fullTextEn||[])].some(value=>value?.toLowerCase().includes(word))');
+  edit('.map(item=>newsCard(item)).join("")', '.map(item=>newsCard(item,false,"thumb")).join("")');
   const archiveBodyStart = js.indexOf('  function drawNewsArchive(');
   const archiveBodyEnd = js.indexOf('  function newsMonth(', archiveBodyStart);
   if (archiveBodyEnd < 0) throw new Error('News archive count integration point unavailable');
@@ -159,7 +169,9 @@ export function patchNews(js, replace) {
       const en=window.F1_LOCALE.english();
       const {title}=newsText(article,en);
       const body=newsBody(article,en);
-      const caption=en?article.captionEn||article.caption:article.caption;
+      const caption=(en?article.captionEn||article.caption:article.caption)||
+        (article.photoReference?(en?(article.photoArchived?"Archive photo · Formula 1":"Illustrative photo · Formula 1"):
+          (article.photoArchived?"资料图 · F1 官方":"配图 · F1 官方")):"");
       const context=newsSessions[article.id];
       const unavailable=en?"This report has no full text available on this site.":"此报道暂未提供可在本站刊登的全文。";
       detail.innerHTML='<button type="button" class="action news-back" data-news-entry="">'+(en?"Back to reports":"返回新闻列表")+'</button>'+
@@ -184,5 +196,11 @@ export function patchNews(js, replace) {
     `<li><button type="button" class="paddock-news-button text-link" data-news-entry="'+safe(article.id)+'">'+safe(article.title)+'</button></li>`);
   edit('    return [lead,...candidates.filter(item=>item.id!==lead.id)].slice(0,4);',
     '    return lead?[lead,...candidates.filter(item=>item.id!==lead.id)].slice(0,4):[];');
+  edit('    if (image.matches?.(".following-track-image[data-layout]")) {',
+    '    if (image.matches?.(".news-visual img,.news-detail figure img")) {\n'+
+    '      image.closest(".news-visual,figure").classList.add("photo-unavailable");\n'+
+    '      return;\n'+
+    '    }\n'+
+    '    if (image.matches?.(".following-track-image[data-layout]")) {');
   return js;
 }

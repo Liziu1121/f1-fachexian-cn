@@ -355,7 +355,7 @@ export async function writeReports(site, media, now = Date.now()) {
   function add(id, stamp, titles, fullTextZh, fullTextEn, key, kind, classificationData) {
     const cover = media[key]?.photos?.[0]?.image || '';
     notes[id] = { title: titles[0], fullTextZh, fullTextEn, classification: classificationData };
-    items.push([id, new Date(stamp).toISOString(), titles[1], '', kind, cover, { title: titles[0] }, { source: 'F1 发车线' }]);
+    items.push([id, new Date(stamp).toISOString(), titles[1], '', kind, cover, { title: titles[0] }, { source: 'F1 发车线', round: key }]);
   }
 
   const teamPoints = new Map(), driverPoints = new Map();
