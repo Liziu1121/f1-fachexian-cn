@@ -72,12 +72,11 @@ export function patchHeroPhoto(js) {
         if (currentPage!=="home" || document.hidden || heroRound()?.start!==round.start) return;
         const first=qs("[data-hero-frame].active");
         const second=qs("[data-hero-frame]:not(.active)");
-        second.width=incoming.naturalWidth;
-        second.height=incoming.naturalHeight;
+        const backdrop=qs(".hero-mobile-backdrop");
+        if (backdrop) backdrop.src=photo.image;
         second.src=photo.image;
         second.alt="";
         second.style.setProperty("--shot-position","50% 50%");
-        second.style.setProperty("--shot-mobile","50% 50%");
         second.removeAttribute("aria-hidden");
         second.classList.add("active");
         first.classList.remove("active");

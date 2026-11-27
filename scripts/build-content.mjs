@@ -290,7 +290,11 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   await Promise.all([
     patch('app.js', (js, replace) => patchHeroPhoto(patchNews(js, replace))),
     patch('video.js', patchVideo),
-    patch('index.html', (html, replace) => patchIndex(html, replace)),
+    patch('index.html', (html, replace) => {
+      const anchor = '      <div class="hero-bg">';
+      const backdrop = `      <img class="hero-mobile-backdrop" src="${initialCover}" alt="" aria-hidden="true">\n`;
+      return patchIndex(initialCover ? replace(html, anchor, backdrop + anchor) : html, replace);
+    }),
     writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliItems: videos.items, biliStatus: videos.status, feed, notes, newsStoryPhotos, sectors, ...photoSelection }) + ';\n'),
   ]);
   console.log('Content ready: ' + feed.items.length + ' recent news items, ' + douyin.items.length + ' verified Douyin videos.');
