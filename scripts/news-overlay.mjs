@@ -47,7 +47,7 @@ export function patchNews(js, replace) {
     '        article.photoReference=true;',
     '        article.photoArchived=info.photoArchived;',
     '        article.photoKind=info.photoKind;',
-    '        article.photoPeople=info.photoPeople;',
+    '        article.photoCaption=info.photoCaption;',
     '      }',
     '      if (info?.url && article.sourceUrl!==info.url) {',
     '        article.sourceUrl=info.url;',
@@ -111,27 +111,18 @@ export function patchNews(js, replace) {
   if (coverStart < 0 || coverEnd < 0) throw new Error('News cover integration point unavailable');
   js = js.slice(0, coverStart) + `  function newsCover(item,width,lazy,detail=false) {
     const en=window.F1_LOCALE.english();
-    const names=newsExtras.newsPeople;
-    const title=" "+(item.titleEn||item.en?.[0]||"").normalize("NFD").replace(/\\p{Diacritic}/gu,"").toLowerCase()
-      .replace(/[^a-z0-9]+/g," ").trim()+" ";
-    const portraits=(item.photoReference?item.photoPeople||[]:Object.keys(names)
-      .filter(code=>title.includes(" "+names[code].surname+" ")).slice(0,3)).map(code=>names[code]).filter(Boolean);
-    const image=(src,alt)=>'<img src="'+safe(src)+'" alt="'+safe(alt)+'" decoding="async"'+
-      (lazy?' loading="lazy"':'')+'>';
-    let kind=item.photoKind, markup="", caption="";
-    if(portraits.length) {
-      kind="portrait";
-      const label=person=>en?person.en:person.zh;
-      markup='<div class="news-portraits">'+portraits.map(person=>image(person.image,detail?label(person):"")).join("")+'</div>';
-      caption=(en?"Official driver portraits · ":"F1 官方人物照 · ")+portraits.map(label).join(en?", ":"、");
-    } else if(item.photoReference&&item.image) {
-      const src=item.image.replace("/c_fit,w_1600/","/c_fit,w_"+width+"/");
-      const label=kind==="circuit"?(en?"Official circuit map":"F1 官方赛道图"):
-        item.photoArchived?(en?"Archive photo · Formula 1":"资料图 · F1 官方"):
-        (en?"Illustrative photo · Formula 1":"配图 · F1 官方");
-      markup=image(src,detail&&kind==="circuit"?label:"");
-      caption=label;
-    }
+    const selected=item.photoReference?item:newsExtras.newsStoryPhotos[item.id];
+    const kind=selected?.photoKind||"editorial";
+    if(!selected?.image||kind==="portrait") return {kind,markup:"",caption:""};
+    const src=selected.image.replace("/c_fit,w_1600/","/c_fit,w_"+width+"/");
+    const label=kind==="circuit"?(en?"Official circuit map":"F1 官方赛道图"):
+      selected.photoArchived?(en?"Archive photo · Formula 1":"资料图 · F1 官方"):
+      kind==="editorial"?(en?"On location · Formula 1":"现场图 · F1 官方"):
+      (en?"Illustrative photo · Formula 1":"配图 · F1 官方");
+    const description=selected.photoCaption?.[en?"en":"zh"]||"";
+    const caption=description?description+" · "+label:label;
+    const markup='<img src="'+safe(src)+'" alt="'+safe(detail?(description||label):"")+'" width="'+width+
+      '" height="'+Math.round(width*9/16)+'" decoding="async"'+(lazy?' loading="lazy"':'')+'>';
     return {kind,markup,caption};
   }
 
@@ -226,13 +217,26 @@ export function patchNews(js, replace) {
   edit('    const lead=recent.find(item=>item.id===officialNewsLeadId)||', '    const lead=candidates.find(item=>item.id===officialNewsLeadId)||');
   edit(`<li><a class="text-link" href="'+route("news",article.id)+'">'+safe(article.title)+'</a></li>`,
     `<li><button type="button" class="paddock-news-button text-link" data-news-entry="'+safe(article.id)+'">'+safe(article.title)+'</button></li>`);
-  edit('    return [lead,...candidates.filter(item=>item.id!==lead.id)].slice(0,4);',
-    '    return lead?[lead,...candidates.filter(item=>item.id!==lead.id)].slice(0,4):[];');
+  edit('    return [lead,...candidates.filter(item=>item.id!==lead.id)].slice(0,4);', [
+    '    if (!lead) return [];',
+    '    const imageKey=item=>{',
+    '      const url=item.photoReference?item.image:newsExtras.newsStoryPhotos[item.id]?.image;',
+    '      return url?.match(/\\/v\\d+\\/(.+)\\.[a-z]+$/i)?.[1]||url;',
+    '    };',
+    '    const selected=[lead], shown=new Set([imageKey(lead)]);',
+    '    for(const item of candidates) {',
+    '      if(item.id===lead.id)continue;',
+    '      const key=imageKey(item);',
+    '      if(key&&shown.has(key))continue;',
+    '      selected.push(item);',
+    '      shown.add(key);',
+    '      if(selected.length===4)break;',
+    '    }',
+    '    return selected;',
+  ].join('\n'));
   edit('    if (image.matches?.(".following-track-image[data-layout]")) {',
     '    if (image.matches?.(".news-visual img,.news-detail figure img")) {\n'+
-    '      const container=image.closest(".news-visual,figure");\n'+
-    '      image.classList.add("portrait-unavailable");\n'+
-    '      if (!container.querySelector("img:not(.portrait-unavailable)")) container.classList.add("photo-unavailable");\n'+
+    '      image.closest(".news-visual,figure").classList.add("photo-unavailable");\n'+
     '      return;\n'+
     '    }\n'+
     '    if (image.matches?.(".following-track-image[data-layout]")) {');

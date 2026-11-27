@@ -220,11 +220,11 @@ body:has(#liveMapDialog[open]) { overflow: hidden; }
 #news #newsList .news-card h2 { font-size:clamp(.94rem, 1.55vw, 1.15rem); }
 #news .news-visual.photo-unavailable, #news .news-detail figure.photo-unavailable { display:none; }
 #news .news-lead:has(.photo-unavailable) { grid-template-columns:1fr; }
-#news .news-portraits { display: flex; height: 100%; background: var(--panel-soft); }
-#news .news-portraits img { flex: 1 1 0; width: 0; min-width: 0; object-fit: contain; object-position: center bottom; }
-#news .news-detail .news-portraits { height: clamp(190px, 45vw, 340px); border-radius: 10px; overflow: hidden; }
-#news .news-detail .news-portraits img { height: 100%; max-height: none; border-radius: 0; background: transparent; }
-#news .news-portraits img.portrait-unavailable { display: none; }
+#news #newsSpotlight .news-visual { aspect-ratio: 16 / 9; position: relative; }
+#news #newsSpotlight .news-visual > img { position: absolute; inset: 0; }
+#news .news-detail figure:not([data-photo-kind="circuit"]) > img {
+  display: block; aspect-ratio: 16 / 9; max-height: none; object-fit: cover;
+}
 #news [data-photo-kind="circuit"] > img { object-fit: contain; background: var(--panel-soft); }
 #news .news-detail [data-photo-kind="circuit"] > img { max-height: 320px; }
 #news .news-lead:not(:has(.news-visual)) { grid-template-columns: 1fr; }

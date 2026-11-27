@@ -7,7 +7,7 @@ import { biliAccount, biliId, latestBilibili } from './bilibili-feed.mjs';
 import { recentDouyin } from './douyin-feed.mjs';
 import { writeReports } from './newsroom.mjs';
 import { patchNews } from './news-overlay.mjs';
-import { newsImages, newsPhotoCatalog } from './news-images.mjs';
+import { editorialPhotos, newsImages, newsPhotoCatalog } from './news-images.mjs';
 import { sourceReports } from './source-reports.mjs';
 
 const han = value => typeof value === 'string' && /\p{Script=Han}/u.test(value);
@@ -271,7 +271,11 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
       (note?.fullTextEn?.length || note?.bodyEn?.length));
     return [...row.slice(0, 7), { ...row[7], onSite }];
   }).sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
-  const feed = { ...externalNews, items: newsImages(originalItems, notes, media, externalNews.items, photoCatalog), leadId: originalItems.find(row => row[7].onSite)?.[0] };
+  const photoEvidence = await editorialPhotos(root, cacheDir, externalNews.items, photoCatalog);
+  const feed = { ...externalNews, items: newsImages(originalItems, notes, media, externalNews.items, photoCatalog, photoEvidence),
+    leadId: originalItems.find(row => row[7].onSite)?.[0] };
+  const newsStoryPhotos = Object.fromEntries(photoEvidence.flatMap(photo => (photo.stories || [])
+    .map(id => [id, { image: photo.url, photoCaption: { zh: photo.captionZh, en: photo.captionEn } }])));
   await writeJson(join(site, 'api', 'news', 'latest.json'), feed);
   await mkdir(join(site, 'api', 'videos'), { recursive: true });
   await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, douyin: douyin.items, douyinStatus });
@@ -284,7 +288,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
     patch('app.js', (js, replace) => patchHeroPhoto(patchNews(js, replace))),
     patch('video.js', patchVideo),
     patch('index.html', (html, replace) => patchIndex(html, replace)),
-    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliItems: videos.items, biliStatus: videos.status, feed, notes, newsPeople: photoCatalog.people, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
+    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliItems: videos.items, biliStatus: videos.status, feed, notes, newsStoryPhotos, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
   ]);
   console.log('Content ready: ' + feed.items.length + ' recent news items, ' + douyin.items.length + ' verified Douyin videos.');
   return feed;
