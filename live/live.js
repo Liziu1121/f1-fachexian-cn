@@ -25,8 +25,13 @@
   const zoomImage = byId('liveMapZoomImage');
   let mapZoom = 1;
   let mapDrag;
+  let driverZoom;
   new ResizeObserver(([entry]) => {
-    if (entry.contentRect.width) driverFrame.style.zoom = String(Math.min(entry.contentRect.width, 330) / 360);
+    const width = entry.contentRect.width;
+    const zoom = Math.min(width, 330) / 360;
+    if (!width || zoom === driverZoom) return;
+    driverZoom = zoom;
+    requestAnimationFrame(() => { driverFrame.style.zoom = String(driverZoom); });
   }).observe(byId('liveDriverWindow'));
   const content = window.F1_CONTENT;
   const html = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
@@ -40,6 +45,8 @@
     fp1: 'Practice 1', fp2: 'Practice 2', fp3: 'Practice 3', q: 'Qualifying',
     sq: 'Sprint Qualifying', sprint: 'Sprint', race: 'Race',
   };
+  const previewLead = 10 * 60_000;
+  const reviewDuration = 20 * 60_000;
   const english = () => window.F1_LOCALE.english();
   let visible = false;
   let timer;
@@ -441,10 +448,11 @@
   }
 
   function draw() {
-    const { session, news, bulletins, generatedAt, scheduleUnavailable } = snapshot ?? {};
-    const isLive = Boolean(session && session.startsAt <= Date.now() && Date.now() < session.endsAt);
+    const { session, phase, news, bulletins, generatedAt, scheduleUnavailable } = snapshot ?? {};
+    const isLive = Boolean(session);
     const focus = document.activeElement;
     const focusMoves = isLive ? gallery.contains(focus) : raceData.contains(focus);
+    if (!isLive && gallery.hidden) leaveScreenFocus();
     raceData.hidden = !isLive;
     gallery.hidden = isLive;
     if (isLive) photoRequest = null;
@@ -463,8 +471,9 @@
 
     drawMap(session);
     byId('liveQualifyingDetails').hidden = !/qualifying|shootout/i.test(session.name);
-    setText('liveState', '赛中实况');
-    byId('liveState').dataset.state = 'live';
+    const states = { pre: language('赛前准备', 'Pre-session'), live: language('赛中实况', 'Live'), post: language('赛后回顾', 'Post-session') };
+    setText('liveState', states[phase]);
+    byId('liveState').dataset.state = phase;
     setText('liveRound', sessionLabel(session));
     setText('liveSchedule', `计划开赛 · ${dateTime(session.startsAt)} · 北京时区`);
     setText('liveNotice', scheduleUnavailable ? '赛程更新暂不可用，按上次加载的赛程显示。' : '');
@@ -515,29 +524,48 @@
     return first.name === second.name && Math.abs(first.startsAt - second.startsAt) <= 15 * 60_000;
   }
 
-  async function readView(signal) {
-    const loaded = await readSnapshot('index', signal).catch(() => null);
-    const index = loaded ?? snapshot?.index;
-    if (!index) return { pollMs: 15_000 };
+  function sessionWindow(schedule, now) {
+    let pre, post;
+    for (const session of schedule) {
+      if (!sessionNames.has(session.name)) continue;
+      const { startsAt, endsAt } = session;
+      if (now >= startsAt && now < endsAt) return { session, phase: 'live' };
+      if (now >= startsAt - previewLead && now < startsAt) pre ??= { session, phase: 'pre' };
+      if (now >= endsAt && now < endsAt + reviewDuration) post ??= { session, phase: 'post' };
+    }
+    return pre || post || {};
+  }
 
-    const now = Date.now();
-    const session = index.schedule.find(candidate => candidate.startsAt <= now && now < candidate.endsAt);
-    const next = index.schedule.findLast(candidate => candidate.startsAt > now);
-    const pollMs = Math.max(1000, Math.min(loaded ? 60_000 : 15_000,
-      (next?.startsAt ?? Infinity) - now, (session?.endsAt ?? Infinity) - now));
-    if (!session) return { index, pollMs };
-
+  function scheduledView(index, scheduleUnavailable) {
+    const { session, phase } = sessionWindow(index?.schedule ?? [], Date.now());
+    if (!session) return { index, scheduleUnavailable };
     const context = [...index.schedule, ...index.archives].find(candidate => candidate.startsAt === index.contextStartsAt);
     const sameContext = sameSession(context, session);
-    const sameWeekend = sameContext || (session?.meeting != null && session.meeting === context?.meeting);
+    const sameWeekend = sameContext || (session.meeting != null && session.meeting === context?.meeting);
     return {
-      index, session, pollMs,
+      index, session, phase, scheduleUnavailable,
       radio: sameSession(index.activeRadio?.session, session) ? index.activeRadio.clips : [],
       generatedAt: index.generatedAt,
-      scheduleUnavailable: !loaded,
       news: sameWeekend ? { ...index.news, coverage: sameContext ? index.news?.coverage : undefined } : undefined,
       bulletins: sameWeekend ? index.bulletins : undefined,
     };
+  }
+
+  function applyView(view) {
+    if (snapshot?.session !== view.session && !sameSession(snapshot?.session, view.session)) {
+      if (recording) stopAudio();
+      setTimelineFilter('all');
+    }
+    snapshot = view;
+    draw();
+  }
+
+  function syncSessionWindow() {
+    if (!visible || document.hidden || !snapshot?.index) return;
+    const { session, phase } = sessionWindow(snapshot.index.schedule, Date.now());
+    if (session !== snapshot.session || phase !== snapshot.phase) {
+      applyView(scheduledView(snapshot.index, snapshot.scheduleUnavailable));
+    }
   }
 
   async function refresh() {
@@ -546,28 +574,26 @@
     const pending = new AbortController();
     request = pending;
     refreshButton.setAttribute('aria-busy', 'true');
-    let pollMs = 60_000;
+    let loaded;
     try {
-      const view = await readView(AbortSignal.any([pending.signal, AbortSignal.timeout(15_000)]));
-      if (request !== pending) return;
-      if (!sameSession(snapshot?.session, view.session)) {
-        if (recording) stopAudio();
-        setTimelineFilter('all');
-      }
-      snapshot = view;
-      pollMs = view.pollMs;
+      loaded = await readSnapshot('index', AbortSignal.any([pending.signal, AbortSignal.timeout(15_000)]));
     } catch {
-      if (request !== pending) return;
-      if (recording) stopAudio();
-      snapshot = null;
-      pollMs = 15_000;
+      // Keep using the last published schedule while retrying.
     } finally {
       if (request === pending) {
         request = null;
         refreshButton.removeAttribute('aria-busy');
-        draw();
-        schedule(pollMs);
+        applyView(scheduledView(loaded ?? snapshot?.index, !loaded));
+        schedule(loaded ? 60_000 : 15_000);
       }
+    }
+  }
+
+  function leaveScreenFocus() {
+    if (document.fullscreenElement === screen) document.exitFullscreen().catch(() => {});
+    if (screen.hasAttribute('data-focus')) {
+      screen.removeAttribute('data-focus');
+      updateFullscreen();
     }
   }
 
@@ -582,13 +608,9 @@
     refreshButton.removeAttribute('aria-busy');
     drawLiveFrames(false);
     if (mapDialog.open) mapDialog.close();
-    if (document.fullscreenElement === screen) document.exitFullscreen().catch(() => {});
+    leaveScreenFocus();
     showFrame(controlFrame, false);
     showFrame(driverFrame, false);
-    if (screen.hasAttribute('data-focus')) {
-      screen.removeAttribute('data-focus');
-      updateFullscreen();
-    }
     stopAudio();
   }
 
@@ -598,11 +620,7 @@
     visible = true;
     galleryTimer = setInterval(() => { if (!galleryPaused) displayGallery(1); }, 7000);
     countdownTimer = setInterval(() => {
-      const session = snapshot?.session;
-      if (!raceData.hidden && session && Date.now() >= session.endsAt) {
-        draw();
-        refresh();
-      }
+      syncSessionWindow();
       updateCountdown();
     }, 1000);
     draw();
@@ -671,7 +689,10 @@
   document.addEventListener('visibilitychange', () => {
     if (!visible) return;
     if (document.hidden) clearTimeout(timer);
-    else refresh();
+    else {
+      syncSessionWindow();
+      refresh();
+    }
   });
   window.addEventListener('f1:language', () => {
     if (visible) draw();

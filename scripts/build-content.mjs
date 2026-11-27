@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { officialArticleUrl, officialNewsLinks, request, xmlText } from './feeds.mjs';
 import { circuitMedia, refreshEdition } from './edition.mjs';
-import { circuitPhotoSelection, patchHeroPhoto } from './home-photo.mjs';
+import { circuitPhotoSelection, patchHeroMarkup, patchHeroPhoto } from './home-photo.mjs';
 import { biliAccount, biliId, latestBilibili } from './bilibili-feed.mjs';
 import { recentDouyin } from './douyin-feed.mjs';
 import { writeReports } from './newsroom.mjs';
@@ -290,11 +290,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   await Promise.all([
     patch('app.js', (js, replace) => patchHeroPhoto(patchNews(js, replace))),
     patch('video.js', patchVideo),
-    patch('index.html', (html, replace) => {
-      const anchor = '      <div class="hero-bg">';
-      const backdrop = `      <img class="hero-mobile-backdrop" src="${initialCover}" alt="" aria-hidden="true">\n`;
-      return patchIndex(initialCover ? replace(html, anchor, backdrop + anchor) : html, replace);
-    }),
+    patch('index.html', (html, replace) => patchIndex(patchHeroMarkup(html), replace)),
     writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliItems: videos.items, biliStatus: videos.status, feed, notes, newsStoryPhotos, sectors, ...photoSelection }) + ';\n'),
   ]);
   console.log('Content ready: ' + feed.items.length + ' recent news items, ' + douyin.items.length + ' verified Douyin videos.');
