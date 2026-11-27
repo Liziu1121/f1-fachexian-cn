@@ -3,6 +3,7 @@
 body:has(#live:not([hidden])) #breadcrumb { display: none; }
 .live-page { width: min(calc(100% - 40px), 1740px); }
 .live-screen {
+  color-scheme: dark;
   --pit-bg: var(--graphite);
   --pit-panel: var(--panel);
   --pit-raised: var(--panel-soft);
@@ -50,22 +51,23 @@ body:has(.live-screen[data-focus]) { overflow: hidden; }
 
 .live-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: minmax(265px, .93fr) minmax(365px, 1.55fr) minmax(230px, .8fr);
   grid-template-areas:
-    "timing timing timing map map map"
-    "driver driver stream stream news news";
-  gap: 8px;
+    "timing map sidebar"
+    "sectors map sidebar";
+  align-items: start;
+  gap: 10px;
   margin-top: 8px;
 }
 .live-board { grid-area: timing; }
 .live-map { grid-area: map; }
-#liveDriverPanel { grid-area: driver; }
-.live-stream { grid-area: stream; }
-.live-briefing { grid-area: news; }
+.live-sectors { grid-area: sectors; }
+.live-wall-side { grid-area: sidebar; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.live-wall-side .live-stream { order: -1; }
+.live-briefing { margin-top: 10px; }
 .live-board, .live-map { display: flex; flex-direction: column; }
 #livePublicTiming { display: flex; flex: 1; min-height: 0; flex-direction: column; }
-.live-timing-window { flex: 1; min-height: clamp(335px, 50vh, 495px); }
-.live-map-preview { flex: 1; min-height: 0; }
+.live-timing-window { flex: 1; min-height: 0; height: clamp(240px, 39vh, 345px); }
 .live-panel { min-width: 0; min-height: 0; background: var(--pit-panel); border: 1px solid var(--pit-edge); border-radius: 9px; overflow: hidden; }
 .live-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 7px; min-height: 41px; padding: 5px 10px; border-bottom: 1px solid var(--pit-edge); background: var(--pit-raised); }
 .live-panel-head h2 { margin: 0; font-size: .83rem; font-weight: 780; white-space: nowrap; }
@@ -75,12 +77,40 @@ body:has(.live-screen[data-focus]) { overflow: hidden; }
 .live-scroll { overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--pit-edge) var(--pit-panel); }
 
 .live-timing-window, .live-control-window { overflow: auto; background: var(--pit-panel); }
-.live-screen iframe { display: block; width: 100%; border: 0; }
-#liveTimingFrame { min-width: 1090px; height: clamp(440px, 66vh, 650px); zoom: .76; }
+/* Match the public widget document's scheme so its transparent canvas can show the site's panel color. */
+.live-screen iframe { display: block; width: 100%; border: 0; color-scheme: light; background: var(--pit-panel); }
+#liveTimingFrame { min-width: 720px; height: 535px; zoom: .76; }
 #liveControlFrame { min-width: 560px; height: 6rem; zoom: .68; }
-.live-map-preview { position: relative; display: block; width: 100%; padding: 14px 10px 34px; border: 0; color: inherit; background: var(--pit-panel); cursor: zoom-in; }
-.live-track-layout { display: block; width: 100%; height: clamp(200px, 37vh, 340px); object-fit: contain; }
-.live-map-hint { position: absolute; inset-inline-end: 10px; bottom: 8px; color: var(--pit-accent); font-size: .72rem; }
+.live-track-stage {
+  position: relative; isolation: isolate; height: clamp(270px, 42vh, 435px);
+  display: grid; place-items: center; overflow: hidden;
+  background: radial-gradient(ellipse at 52% 47%, var(--pit-raised), var(--pit-panel) 72%);
+}
+.live-track-stage :is(iframe, canvas, img) { position: absolute; inset: 0; width: 100%; height: 100%; }
+.live-track-stage iframe { background: transparent; }
+.live-track-layout { object-fit: contain; padding: 12px; }
+.live-track-stage .live-empty { z-index: 1; text-align: center; }
+.live-map-preview {
+  align-self: flex-start; margin: 6px 10px; border: 1px solid var(--pit-edge); border-radius: 6px;
+  color: var(--pit-accent); background: var(--pit-raised); padding: 5px 8px; cursor: zoom-in; font-size: .72rem;
+}
+.live-map-roster { max-height: 105px; display: flex; align-content: start; flex-wrap: wrap; gap: 5px; padding: 7px 10px; border-top: 1px solid var(--pit-edge); }
+.live-map-roster:empty { display: none; }
+.live-driver-chip { display: inline-flex; gap: 5px; align-items: center; border: 1px solid var(--pit-edge); background: var(--pit-raised); color: var(--ink); border-radius: 14px; padding: 2px 6px 2px 3px; font: 650 .68rem var(--pit-mono); }
+.live-driver-chip i { width: 15px; height: 15px; display: grid; place-items: center; border: 2px solid var(--team-color, var(--pit-muted)); border-radius: 50%; font-size: .58rem; font-style: normal; line-height: 1; }
+.live-rank-list { max-height: clamp(260px, 44vh, 395px); }
+.live-sector-window { max-height: 210px; }
+#liveSectorFrame { min-width: 610px; height: 480px; zoom: .75; }
+.live-data-table { border-collapse: collapse; min-width: max-content; width: 100%; font: 650 .72rem var(--pit-mono); }
+.live-data-table :is(th, td) { text-align: end; padding: 6px 8px; white-space: nowrap; border-bottom: 1px solid var(--pit-edge); }
+.live-data-table :is(th, td):nth-child(-n+2) { text-align: start; }
+.live-data-table thead th { position: sticky; top: 0; color: var(--pit-muted); background: var(--pit-raised); }
+.live-data-table .live-driver-chip { vertical-align: middle; }
+.live-leader { padding: 10px; }
+.live-leader h3 { margin: 0 0 8px; font-size: .9rem; }
+.live-leader dl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.live-leader dt { color: var(--pit-muted); font-size: .74rem; }
+.live-leader dd { margin: 3px 0 0; font: 720 .85rem var(--pit-mono); }
 .live-map-preview:focus-visible { outline: 2px solid var(--pit-accent); outline-offset: -3px; }
 .live-map-dialog { width: min(1280px, calc(100vw - 24px)); height: min(900px, 90dvh); max-width: none; max-height: 94dvh; box-sizing: border-box; padding: 0; border: 1px solid var(--pit-edge); border-radius: 12px; color: inherit; background: var(--pit-panel); }
 .live-map-dialog[open] { display: flex; flex-direction: column; }
@@ -132,10 +162,10 @@ body:has(#liveMapDialog[open]) { overflow: hidden; }
 .live-notes summary { cursor: pointer; font-weight: 700; }
 .live-notes ul { display: flex; flex-wrap: wrap; gap: 6px 20px; padding-left: 0; margin: 8px 0 0; list-style: none; }
 .live-notes p { margin-top: 7px; }
-@media (max-width: 880px) {
+@media (max-width: 980px) {
   .live-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-areas: "timing timing" "map map" "driver stream" "news news";
+    grid-template-areas: "map map" "timing sidebar" "sectors sidebar";
   }
 }
 
@@ -143,7 +173,7 @@ body:has(#liveMapDialog[open]) { overflow: hidden; }
   .live-page { width: calc(100% - 18px); }
   .live-grid {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "timing" "map" "driver" "stream" "news";
+    grid-template-areas: "map" "timing" "sectors" "sidebar";
   }
   .live-session { align-items: start; flex-direction: column; }
   .live-controls { justify-content: flex-start; }
@@ -183,7 +213,8 @@ body:has(#liveMapDialog[open]) { overflow: hidden; }
 .live-driver-compare { margin-top: 8px; }
 .live-compare-tools { padding: 10px; }
 .live-compare-tools label { display: grid; gap: 4px; min-width: 0; font-size: .78rem; }
-.live-compare-tools select { max-width: 100%; }
+.live-compare-tools select { max-width: 100%; color-scheme: dark; background: var(--pit-raised); color: var(--ink); border: 1px solid var(--pit-edge); }
+.live-compare-tools p { margin: 0; flex: 1 1 235px; font-size: .74rem; }
 .live-compare-table { width: 100%; min-width: 410px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .live-compare-table :is(td, th) { padding: 7px 10px; text-align: start; border-top: 1px solid var(--pit-edge); }
 .live-compare-table thead { background: var(--pit-raised); }

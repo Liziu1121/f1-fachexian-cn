@@ -15,6 +15,9 @@
   const audio = byId('liveAudio');
   const refreshButton = byId('liveRefresh');
   const timingFrame = byId('liveTimingFrame');
+  const trackFrame = byId('liveTrackFrame');
+  const sectorFrame = byId('liveSectorFrame');
+  const trackCanvas = byId('liveTrackCanvas');
   const statusFrame = byId('liveStatusFrame');
   const driverFrame = byId('liveDriverFrame');
   const controlFrame = byId('liveControlFrame');
@@ -57,8 +60,9 @@
   let galleryCourse, galleryIndex = 0, galleryTimer, countdownTimer;
   let photoRequest, photoTransition, activePhoto = 0;
   let galleryPaused = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let compareRequest, compareDetails;
-  const comparison = new Map();
+  let archiveRequest, showRecent = false;
+  let telemetryRequest, telemetry, telemetrySession = '', telemetryRetry = 0, telemetryTimer;
+  const archives = new Map();
   const language = (zh, en) => english() ? en : zh;
 
   function setMarkup(id, value) {
@@ -226,69 +230,142 @@
     displayGallery();
   });
 
-  function rowTable(first, second) {
-    const entries = [
-      ['排名', 'Position', row => row.finish || row.position],
-      ['圈数', 'Laps', row => row.laps],
-      ['最快圈', 'Best lap', row => lapTime(row.best)],
-      ['上一圈', 'Last lap', row => lapTime(row.last)],
-      ['领先差', 'Gap to leader', row => gap(row.gap)],
-      ...[0, 1, 2].map(i => [`S${i + 1}`, `S${i + 1}`, row => measurement(row.measuredLap?.sectors[i]?.time, 's', 3)]),
-      ['最快圈测速点', 'Speed trap on best lap', row => measurement(row.measuredLap?.speed, 'km/h')],
-      ['进站次数', 'Pit stops', row => row.pitCount],
-      ['轮胎策略', 'Tyre strategy', row => row.tyreStints?.map(stint => `${stint.compound} L${stint.start}–${stint.end}`).join(' · ') || '—'],
-    ];
-    return `<table class="live-compare-table"><thead><tr><th scope="col">${language('项目', 'Metric')}</th>${[first, second].map(row =>
-      `<th scope="col">${html(driverName(row.driver))}</th>`).join('')}</tr></thead><tbody>${entries.map(([zh, en, value]) =>
-      `<tr><th scope="row">${language(zh, en)}</th><td>${html(value(first) ?? '—')}</td><td>${html(value(second) ?? '—')}</td></tr>`).join('')}</tbody></table>`;
+  const cleanColor = color => /^#[0-9a-f]{6}$/i.test(color) ? color : '';
+  const selectedArchive = () => archives.get(snapshot?.session?.key);
+  const liveSample = () => telemetrySession === sessionIdentity(snapshot?.session) && snapshot?.phase === 'live' &&
+    telemetry && Date.now() - telemetry.at <= 25_000 ? telemetry : null;
+
+  function sessionIdentity(session) {
+    return session ? session.name + ':' + session.startsAt : '';
+  }
+
+  function roster() {
+    const archive = selectedArchive();
+    const source = snapshot?.phase === 'archive' || snapshot?.phase === 'post'
+      ? archive?.details.rows.map(row => row.driver) : liveSample()?.drivers;
+    const drivers = source?.length ? source : snapshot?.index?.pitwall?.drivers ?? [];
+    return [...new Map(drivers.filter(driver => Number.isInteger(driver.number))
+      .map(driver => [driver.number, driver])).values()];
+  }
+
+  function driverBadge(driver) {
+    const name = driverName(driver);
+    const color = cleanColor(driver.color);
+    return '<span class="live-driver-chip" role="img"' + (color ? ' style="--team-color:' + color + '"' : '') +
+      ' aria-label="' + html(name + ' #' + driver.number) + '" title="' + html(name + ' #' + driver.number) + '"><i aria-hidden="true">' + html(driver.number) +
+      '</i><span>' + html(driver.code || name) + '</span></span>';
   }
 
   function setOptions(select, options, preferred) {
     const old = select.value || String(preferred ?? '');
-    const markup = options.map(([value, label]) => `<option value="${html(value)}">${html(label)}</option>`).join('');
-    if (cachedMarkup.get(select) === markup) return;
-    select.innerHTML = markup;
-    cachedMarkup.set(select, markup);
-    if (options.some(([value]) => String(value) === old)) select.value = old;
+    const markup = options.map(([value, label]) => '<option value="' + html(value) + '">' + html(label) + '</option>').join('');
+    if (cachedMarkup.get(select) !== markup) {
+      select.innerHTML = markup;
+      cachedMarkup.set(select, markup);
+      if (options.some(([value]) => String(value) === old)) select.value = old;
+    }
+  }
+
+  function tyreAge(stint) {
+    if (![stint?.start, stint?.end, stint?.ageAtStart].every(Number.isInteger) || stint.end < stint.start) return '—';
+    return (stint.ageAtStart + stint.end - stint.start + 1) + language(' 圈', ' laps');
+  }
+
+  function compound(value) {
+    return (!english() ? { SOFT: '软胎', MEDIUM: '中性胎', HARD: '硬胎', INTERMEDIATE: '半雨胎', WET: '全雨胎' }[value] : value) || value || '—';
   }
 
   function drawComparisonRows() {
-    const rows = compareDetails?.rows || [];
+    const panel = byId('liveComparePanel');
+    const open = ['pre', 'live'].includes(snapshot?.phase);
+    panel.hidden = !open;
+    if (!open) return;
+    const rows = roster();
     const first = byId('liveCompareFirst'), second = byId('liveCompareSecond');
-    const options = rows.map(row => [row.driver.number, driverName(row.driver)]);
+    const options = rows.map(driver => [driver.number, driverName(driver) + ' · #' + driver.number]);
     setOptions(first, options, options[0]?.[0]);
     setOptions(second, options, options[1]?.[0]);
-    first.disabled = second.disabled = rows.length < 2;
-    if (first.value === second.value && rows.length > 1) second.value = options.find(([value]) => String(value) !== first.value)[0];
+    first.disabled = second.disabled = options.length < 2;
+    if (first.value === second.value && options.length > 1) second.value = options.find(([number]) => String(number) !== first.value)[0];
     for (const option of second.options) option.disabled = option.value === first.value;
-    const selected = [first, second].map(select => rows.find(row => String(row.driver.number) === select.value));
-    setMarkup('liveCompareResult', selected.every(Boolean) ?
-      rowTable(...selected) : empty(language('该场次暂无足够的车手数据。', 'This session has insufficient data for comparison.')));
+    for (const option of first.options) option.disabled = option.value === second.value;
+    const selected = [first, second].map(select => rows.find(driver => String(driver.number) === select.value));
+    const sample = liveSample();
+    const status = sample ? language('本场遥测 · ', 'Current session telemetry · ') + clock(sample.at)
+      : snapshot?.phase === 'pre' ? language('等待本场遥测。', 'Waiting for this session’s telemetry.')
+        : language('本场实时遥测暂不可用。', 'Live telemetry is unavailable for this session.');
+    setText('liveCompareStatus', status + ' ' + language('轮胎以已用圈数显示。', 'Tyres are shown by laps used.'));
+    if (!selected.every(Boolean)) return setMarkup('liveCompareResult', empty(language('等待本场车手名单。', 'Waiting for the session driver list.')));
+    const entries = [
+      [language('瞬时车速', 'Speed'), number => measurement(sample?.speeds[number], 'km/h')],
+      [language('当前轮胎', 'Compound'), number => compound(sample?.tyres[number]?.compound)],
+      [language('轮胎已用', 'Tyre age'), number => tyreAge(sample?.tyres[number])],
+      [language('最近计时圈', 'Last timed lap'), number => lapTime(sample?.laps[number]?.lap_duration)],
+      ...[1, 2, 3].map(i => ['S' + i, number => measurement(sample?.laps[number]?.['duration_sector_' + i], 's', 3)]),
+      [language('测速点', 'Speed trap'), number => measurement(sample?.laps[number]?.st_speed, 'km/h')],
+    ];
+    setMarkup('liveCompareResult', '<table class="live-compare-table"><thead><tr><th scope="col">' +
+      language('项目', 'Metric') + '</th>' + selected.map(driver => '<th scope="col">' + driverBadge(driver) + ' ' + html(driverName(driver)) + '</th>').join('') +
+      '</tr></thead><tbody>' + entries.map(([label, value]) => '<tr><th scope="row">' + label + '</th>' +
+        selected.map(driver => '<td>' + html(value(driver.number)) + '</td>').join('') + '</tr>').join('') + '</tbody></table>');
   }
 
-  async function drawComparison(view) {
-    const selector = byId('liveCompareSession');
-    const sessions = view?.index?.archives || [];
-    setOptions(selector, sessions.map(session => [session.key, sessionLabel(session)]), view?.session?.key);
-    selector.disabled = !sessions.length;
-    const key = selector.value;
-    if (!key) { compareDetails = null; drawComparisonRows(); return; }
-    if (comparison.has(key)) { compareDetails = comparison.get(key); drawComparisonRows(); return; }
-    if (compareRequest === key) return;
-    compareRequest = key;
-    setMarkup('liveCompareResult', empty(language('正在读取场次数据…', 'Loading session data…')));
-    try {
-      const data = await readSnapshot(key, AbortSignal.timeout(8000));
-      if (data.details?.session.key === key) comparison.set(key, data.details);
-    } catch { /* A later refresh can retry. */ }
-    if (compareRequest === key) compareRequest = null;
-    if (selector.value === key) { compareDetails = comparison.get(key); drawComparisonRows(); }
-  }
-  byId('liveCompareSession').addEventListener('change', () => drawComparison(snapshot));
   byId('liveCompareFirst').addEventListener('change', drawComparisonRows);
   byId('liveCompareSecond').addEventListener('change', drawComparisonRows);
 
-  const radioClips = view => view?.radio ?? [];
+  async function readArchive(view) {
+    const key = view?.session?.key;
+    if (!['post', 'archive'].includes(view?.phase) || !key || archives.has(key) || archiveRequest === key ||
+      !view.index.archives.some(session => session.key === key)) return;
+    archiveRequest = key;
+    try {
+      const data = await readSnapshot(key, AbortSignal.timeout(8000));
+      if (data.details?.session.key === key) archives.set(key, data);
+    } catch { /* A later refresh can retry. */ }
+    finally {
+      if (archiveRequest === key) archiveRequest = null;
+    }
+    if (visible && snapshot?.session?.key === key && archives.has(key)) draw();
+  }
+
+  function resetTelemetry() {
+    telemetryRequest?.abort();
+    telemetryRequest = null;
+    telemetrySession = '';
+    telemetry = null;
+    telemetryRetry = 0;
+  }
+
+  async function pollTelemetry() {
+    if (!visible || document.hidden || snapshot?.phase !== 'live' || telemetryRequest || Date.now() < telemetryRetry) return;
+    const session = snapshot.session;
+    const id = sessionIdentity(session);
+    const pending = new AbortController();
+    telemetryRequest = pending;
+    try {
+      const data = await window.F1_PITWALL.fetchTelemetry(session, AbortSignal.any([pending.signal, AbortSignal.timeout(8000)]), telemetry?.drivers);
+      if (telemetryRequest !== pending) return;
+      telemetry = data;
+      telemetrySession = id;
+      telemetryRetry = Date.now() + (data ? 0 : 25_000);
+    } catch {
+      if (telemetryRequest !== pending) return;
+      telemetry = null;
+      telemetryRetry = Date.now() + 90_000;
+    } finally {
+      if (telemetryRequest === pending) {
+        telemetryRequest = null;
+        if (visible && snapshot?.phase === 'live' && sessionIdentity(snapshot.session) === id) {
+          drawComparisonRows();
+          drawTrackStage();
+          drawSectorPanel();
+        }
+      }
+    }
+  }
+
+  const radioClips = view => ['post', 'archive'].includes(view?.phase)
+    ? archives.get(view.session?.key)?.details.radio ?? view.radio ?? [] : view?.radio ?? [];
   function radioTranscript(clip) {
     const transcript = clip?.transcript;
     if (!transcript?.text) return language('转写暂不可用', 'Transcript unavailable');
@@ -300,12 +377,15 @@
 
   function drawTimeline() {
     const clips = radioClips(snapshot).filter(clip => link(clip.url));
-    const shown = timelineFilter === 'control' ? [] : [...clips].sort((a, b) => b.date - a.date);
-    const showControl = timelineFilter !== 'radio';
+    const archive = ['post', 'archive'].includes(snapshot?.phase) ? selectedArchive()?.details : null;
+    const events = timelineFilter === 'radio' ? [] : archive?.events ?? [];
+    const shown = [...(timelineFilter === 'control' ? [] : clips), ...events].sort((a, b) => b.date - a.date);
+    const showControl = timelineFilter !== 'radio' && (snapshot?.phase === 'live' || (snapshot?.phase === 'post' && !archive));
     showFrame(controlFrame, showControl);
     byId('livePublicControl').hidden = !showControl;
     setText('liveTimelineCount', shown.length ? `${shown.length} 条` : '');
     const list = shown.map(item => {
+      if (item.message) return `<li><time datetime="${new Date(item.date).toISOString()}">${clock(item.date)}</time><article><span class="live-feed-tag">赛会消息</span><p>${html(item.message)}</p></article></li>`;
       const driver = driverName(item.driver);
       return `<li><time datetime="${new Date(item.date).toISOString()}">${clock(item.date)}</time><article>` +
         `<span class="live-feed-tag" data-kind="radio">车队电台</span><p>${html(driver)}</p><small>${html(teamName(item.driver.team))}</small>` +
@@ -343,9 +423,7 @@
   }
 
   function drawLiveFrames(isLive) {
-    byId('livePublicTiming').hidden = !isLive;
     byId('livePublicStatus').hidden = !isLive;
-    showFrame(timingFrame, isLive);
     showFrame(statusFrame, isLive);
   }
 
@@ -403,16 +481,111 @@
   mapViewer.addEventListener('pointercancel', stopMapDrag);
   mapDialog.addEventListener('close', stopMapDrag);
   map.addEventListener('load', () => {
-    map.hidden = false;
     mapOpen.disabled = false;
-    byId('liveMapStatus').hidden = true;
+    if (visible && snapshot?.session) drawTrackStage();
   });
   map.addEventListener('error', () => {
     mapOpen.hidden = true;
     map.removeAttribute('src');
-    byId('liveMapStatus').hidden = false;
     setText('liveMapStatus', '官方赛道图暂不可用');
+    if (visible && snapshot?.session) drawTrackStage();
   });
+
+  function layoutFor(view) {
+    const session = view?.session;
+    if (!session) return null;
+    const match = session.meeting == null ? null : view.index.archives.find(item => String(item.meeting) === String(session.meeting));
+    const key = session.circuitKey ?? match?.circuitKey;
+    return view.index.pitwall?.layouts?.[new Date(session.startsAt).getUTCFullYear() + '-' + key] ?? null;
+  }
+
+  function drawTrackStage() {
+    const view = snapshot;
+    const layout = layoutFor(view);
+    const archive = ['post', 'archive'].includes(view?.phase) ? selectedArchive()?.details.telemetry : null;
+    const data = liveSample() ?? archive;
+    const withPositions = Boolean(layout && Object.keys(data?.positions ?? {}).length);
+    const widget = Boolean(view?.session && (view.phase === 'live' || (view.phase === 'post' && !selectedArchive())) && !withPositions);
+    const native = Boolean(layout && !widget);
+    trackFrame.hidden = !widget;
+    showFrame(trackFrame, widget);
+    trackCanvas.hidden = !native;
+    const official = !widget && !native && map.complete && map.naturalWidth > 0;
+    map.hidden = !official;
+    byId('liveMapStatus').hidden = widget || native || official;
+    if (native) window.F1_PITWALL.paint(trackCanvas, layout, roster(), data?.positions);
+    setText('liveMapCaption', withPositions ? (archive
+      ? language('位置回放快照 · ', 'Position snapshot · ') + clock(archive.at)
+      : language('本场实时车位', 'Live positions'))
+      : widget ? language('实时车位估算', 'Estimated live positions')
+        : language('赛道轮廓', 'Circuit layout'));
+    const drivers = roster();
+    setMarkup('liveMapRoster', drivers.map(driverBadge).join(''));
+  }
+
+  new ResizeObserver(() => {
+    if (!trackCanvas.hidden) drawTrackStage();
+  }).observe(trackCanvas);
+
+  const dataTable = (headers, rows) => '<table class="live-data-table"><thead><tr>' +
+    headers.map(label => '<th scope="col">' + html(label) + '</th>').join('') + '</tr></thead><tbody>' +
+    rows.map(row => '<tr>' + row.map((cell, i) => i === 0 ? '<th scope="row">' + cell + '</th>' : '<td>' + cell + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+
+  function drawSectorPanel() {
+    const archive = ['archive', 'post'].includes(snapshot?.phase) ? selectedArchive()?.details : null;
+    const live = liveSample();
+    const rows = archive?.rows ?? [];
+    const liveLaps = live?.laps ?? {};
+    const hasLaps = Object.values(liveLaps).some(lap => lap?.duration_sector_1 || lap?.duration_sector_2 || lap?.duration_sector_3);
+    const worker = snapshot?.phase === 'live' && !hasLaps;
+    showFrame(sectorFrame, worker);
+    byId('livePublicSectors').hidden = !worker;
+    byId('liveSectorData').hidden = worker;
+    const title = archive ? language('最快圈 · 测速点', 'Best laps · Speed traps')
+      : hasLaps ? language('最近计时圈 · 测速点', 'Last timed laps · Speed traps')
+        : worker ? language('实时分段与小段', 'Live sectors and mini-sectors') : '';
+    setText('liveSectorCaption', title);
+    const entries = archive ? rows.map(row => [row.driver, row.measuredLap?.sectors.map(sector => sector.time) ?? [],
+      row.measuredLap?.speedTraps ?? [null, null, row.measuredLap?.speed]]) :
+      roster().filter(driver => liveLaps[driver.number]).map(driver => {
+        const lap = liveLaps[driver.number];
+        return [driver, [lap.duration_sector_1, lap.duration_sector_2, lap.duration_sector_3], [lap.i1_speed, lap.i2_speed, lap.st_speed]];
+      });
+    const headers = [language('车手', 'Driver'), 'S1 (s)', 'S2 (s)', 'S3 (s)', 'I1 km/h', 'I2 km/h', 'ST km/h'];
+    setMarkup('liveSectorData', entries.length ? dataTable(headers, entries.map(([driver, times, traps]) => [
+      driverBadge(driver), ...[0, 1, 2].map(i => Number.isFinite(times[i]) ? times[i].toFixed(3) : '—'),
+      ...[0, 1, 2].map(i => Number.isFinite(traps[i]) ? String(traps[i]) : '—'),
+    ])) : empty(language('等待本场分段数据。', 'Waiting for session splits.')));
+  }
+
+  function drawStandings() {
+    const archive = ['archive', 'post'].includes(snapshot?.phase) ? selectedArchive()?.details : null;
+    const rows = archive?.rows ?? [];
+    const live = snapshot?.phase === 'live' || (snapshot?.phase === 'post' && !archive);
+    byId('livePublicTiming').hidden = !live;
+    byId('liveNativeTiming').hidden = live;
+    showFrame(timingFrame, live);
+    showFrame(driverFrame, live);
+    byId('liveDriverWindow').hidden = !live;
+    byId('liveNativeLeader').hidden = live;
+    const headers = [language('排名', 'Pos.'), language('车手', 'Driver'), language('领先差', 'Gap'), language('距前车', 'Interval'),
+      language('最快圈', 'Best'), language('上一圈', 'Last'), language('轮胎', 'Tyre'), language('进站', 'Pits')];
+    setMarkup('liveNativeTiming', rows.length ? dataTable(headers, rows.map(row => [
+      html(row.finish ?? row.position ?? '—'), driverBadge(row.driver), html(gap(row.gap)), html(gap(row.interval)),
+      lapTime(row.best), lapTime(row.last), html(compound(row.tyreStints?.at(-1)?.compound)), html(row.pitCount ?? '—'),
+    ])) : empty(language('等待本场排名。', 'Waiting for session standings.')));
+    const leader = rows.find(row => row.position === 1) || rows[0];
+    const stats = leader ? [
+      [language('最快圈', 'Best lap'), lapTime(leader.best)],
+      [language('测速点', 'Speed trap'), measurement(leader.measuredLap?.speed, 'km/h')],
+      [language('轮胎已用', 'Tyre age'), tyreAge(leader.tyreStints?.at(-1))],
+      [language('进站', 'Pit stops'), leader.pitCount ?? '—'],
+    ] : [];
+    setMarkup('liveNativeLeader', leader ? '<div class="live-leader"><h3>' + driverBadge(leader.driver) + ' ' +
+      html(driverName(leader.driver)) + '</h3><dl>' + stats.map(([name, value]) => '<div><dt>' + name +
+        '</dt><dd>' + html(value) + '</dd></div>').join('') + '</dl></div>' :
+      empty(language('等待本场领先车手。', 'Waiting for the session leader.')));
+  }
 
   function drawMap(session) {
     const course = sessionCircuit(session)?.[0];
@@ -450,6 +623,8 @@
   function draw() {
     const { session, phase, news, bulletins, generatedAt, scheduleUnavailable } = snapshot ?? {};
     const isLive = Boolean(session);
+    byId('liveGalleryData').hidden = !snapshot?.index?.archives?.length;
+    byId('liveBackGallery').hidden = phase !== 'archive';
     const focus = document.activeElement;
     const focusMoves = isLive ? gallery.contains(focus) : raceData.contains(focus);
     if (!isLive && gallery.hidden) leaveScreenFocus();
@@ -457,11 +632,14 @@
     gallery.hidden = isLive;
     if (isLive) photoRequest = null;
     byId('liveSourceNotes').hidden = !isLive;
-    drawLiveFrames(isLive);
+    drawLiveFrames(phase === 'live' || (phase === 'post' && !selectedArchive()));
 
     if (!isLive) {
       showFrame(driverFrame, false);
       showFrame(controlFrame, false);
+      showFrame(timingFrame, false);
+      showFrame(trackFrame, false);
+      showFrame(sectorFrame, false);
       if (mapDialog.open) mapDialog.close();
       if (recording) stopAudio();
       drawGallery();
@@ -470,8 +648,12 @@
     }
 
     drawMap(session);
+    drawTrackStage();
+    drawStandings();
+    drawSectorPanel();
     byId('liveQualifyingDetails').hidden = !/qualifying|shootout/i.test(session.name);
-    const states = { pre: language('赛前准备', 'Pre-session'), live: language('赛中实况', 'Live'), post: language('赛后回顾', 'Post-session') };
+    const states = { pre: language('赛前准备', 'Pre-session'), live: language('赛中实况', 'Live'),
+      post: language('赛后回顾', 'Post-session'), archive: language('最近一场 · 已结束', 'Latest session · Ended') };
     setText('liveState', states[phase]);
     byId('liveState').dataset.state = phase;
     setText('liveRound', sessionLabel(session));
@@ -479,12 +661,12 @@
     setText('liveNotice', scheduleUnavailable ? '赛程更新暂不可用，按上次加载的赛程显示。' : '');
     byId('liveNotice').hidden = !scheduleUnavailable;
 
-    setText('liveTimingCaption', '实时计时与分段');
-    setText('liveDriverCode', '领先车手');
-    showFrame(driverFrame, true);
+    setText('liveTimingCaption', phase === 'live' ? language('实时计时', 'Live timing') : '');
     drawTimeline();
-    drawBulletins(news, bulletins);
-    drawComparison(snapshot);
+    const archive = selectedArchive();
+    drawBulletins(archive?.news ?? news, archive?.bulletins ?? bulletins);
+    drawComparisonRows();
+    readArchive(snapshot);
     const timestamp = byId('liveSnapshotAt');
     timestamp.hidden = !news?.items?.length || !Number.isFinite(generatedAt);
     if (!timestamp.hidden) setText('liveSnapshotAt', `资讯快照发布于 · ${dateTime(generatedAt)} · 北京时区`);
@@ -537,7 +719,11 @@
   }
 
   function scheduledView(index, scheduleUnavailable) {
-    const { session, phase } = sessionWindow(index?.schedule ?? [], Date.now());
+    let { session, phase } = sessionWindow(index?.schedule ?? [], Date.now());
+    if (!session && showRecent && index?.archives?.[0]) {
+      session = index.archives[0];
+      phase = 'archive';
+    }
     if (!session) return { index, scheduleUnavailable };
     const context = [...index.schedule, ...index.archives].find(candidate => candidate.startsAt === index.contextStartsAt);
     const sameContext = sameSession(context, session);
@@ -552,19 +738,22 @@
   }
 
   function applyView(view) {
-    if (snapshot?.session !== view.session && !sameSession(snapshot?.session, view.session)) {
+    const changed = sessionIdentity(snapshot?.session) !== sessionIdentity(view.session);
+    if (changed || snapshot?.phase !== view.phase) resetTelemetry();
+    if (changed) {
       if (recording) stopAudio();
       setTimelineFilter('all');
     }
     snapshot = view;
     draw();
+    pollTelemetry();
   }
 
   function syncSessionWindow() {
     if (!visible || document.hidden || !snapshot?.index) return;
-    const { session, phase } = sessionWindow(snapshot.index.schedule, Date.now());
-    if (session !== snapshot.session || phase !== snapshot.phase) {
-      applyView(scheduledView(snapshot.index, snapshot.scheduleUnavailable));
+    const view = scheduledView(snapshot.index, snapshot.scheduleUnavailable);
+    if (sessionIdentity(view.session) !== sessionIdentity(snapshot.session) || view.phase !== snapshot.phase) {
+      applyView(view);
     }
   }
 
@@ -602,11 +791,16 @@
     photoRequest = null;
     clearInterval(galleryTimer);
     clearInterval(countdownTimer);
+    clearInterval(telemetryTimer);
+    resetTelemetry();
     clearTimeout(timer);
     request?.abort();
     request = null;
     refreshButton.removeAttribute('aria-busy');
     drawLiveFrames(false);
+    showFrame(timingFrame, false);
+    showFrame(trackFrame, false);
+    showFrame(sectorFrame, false);
     if (mapDialog.open) mapDialog.close();
     leaveScreenFocus();
     showFrame(controlFrame, false);
@@ -617,17 +811,25 @@
   function show() {
     if (visible) return;
     snapshot = null;
+    showRecent = false;
     visible = true;
     galleryTimer = setInterval(() => { if (!galleryPaused) displayGallery(1); }, 7000);
     countdownTimer = setInterval(() => {
       syncSessionWindow();
       updateCountdown();
     }, 1000);
+    telemetryTimer = setInterval(pollTelemetry, 10_000);
     draw();
     refresh();
   }
 
   refreshButton.addEventListener('click', refresh);
+  for (const [id, open] of [['liveGalleryData', true], ['liveBackGallery', false]]) {
+    byId(id).addEventListener('click', () => {
+      showRecent = open;
+      applyView(scheduledView(snapshot?.index, snapshot?.scheduleUnavailable));
+    });
+  }
   function updateFullscreen() {
     const active = document.fullscreenElement === screen || screen.hasAttribute('data-focus');
     fullscreen.setAttribute('aria-pressed', String(active));
