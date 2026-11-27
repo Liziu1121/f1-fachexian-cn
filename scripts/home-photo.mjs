@@ -1,3 +1,37 @@
+export const circuitPhotoLimit = 12;
+const livePhotoLimit = 10;
+
+export function photoIdentity(image) {
+  if (!image) return '';
+  const path = image.match(/\/v\d+\/([^?#]+)/)?.[1] || image.split(/[?#]/, 1)[0];
+  let asset;
+  try { asset = decodeURIComponent(path); }
+  catch { asset = path; }
+  const name = asset.replace(/\.[^.]+$/, '').toLowerCase();
+  const photoNumber = name.split('/').at(-1).match(/^(?:gettyimages[-_ ])?(\d{8,})$/)?.[1];
+  return photoNumber ? 'photo:' + photoNumber : name;
+}
+
+function homePhotoScore({ image }) {
+  if (/racehub|panorama|aerial/i.test(image)) return 3;
+  return /trackside-images.*grand_prix/i.test(image) && !/practice|qualifying/i.test(image) ? 2 : 1;
+}
+
+export function circuitPhotoSelection(media, initialCover) {
+  const pools = Object.entries(media).map(([round, { photos }]) =>
+    [round, [...new Map(photos.filter(photo => photo.image).map(photo => [photoIdentity(photo.image), photo])).values()]]);
+  const homePhotos = Object.fromEntries(pools.map(([round, photos]) => {
+    const reserve = photos.length >= circuitPhotoLimit ? 2 : 1;
+    return [round, [...photos].sort((a, b) => homePhotoScore(b) - homePhotoScore(a)).slice(0, reserve)];
+  }));
+  const reserved = new Set([photoIdentity(initialCover), ...Object.values(homePhotos).flat().map(photo => photoIdentity(photo.image))]);
+  const galleries = Object.fromEntries(pools.map(([round, photos]) => {
+    const distinct = photos.filter(photo => !reserved.has(photoIdentity(photo.image)));
+    return [round, (distinct.length ? distinct : photos).slice(0, livePhotoLimit)];
+  }));
+  return { homePhotos, galleries };
+}
+
 export function patchHeroPhoto(js) {
   const start = js.indexOf('  const initialHeroStamp=');
   const end = js.indexOf('  function activateMotion()', start);
@@ -28,9 +62,7 @@ export function patchHeroPhoto(js) {
     if (currentPage!=="home" || document.hidden) return;
     const round=heroRound();
     if (!round || round.start===featuredRound?.start || round.start===loadingRound) return;
-    const photos=window.F1_CONTENT_EXTRAS.galleries?.[round.key] || [];
-    const score=photo=>/racehub/i.test(photo.image)?3:/trackside-images.*grand_prix/i.test(photo.image)&&!/practice|qualifying/i.test(photo.image)?2:1;
-    const candidates=[...photos].sort((a,b)=>score(b)-score(a));
+    const candidates=window.F1_CONTENT_EXTRAS.homePhotos?.[round.key] || [];
     loadingRound=round.start;
     try {
       for (const photo of candidates) {

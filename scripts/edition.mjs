@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { request, xmlText, publisherHeadlines } from './feeds.mjs';
 import { readPdfText } from './pdf-text.mjs';
+import { circuitPhotoLimit, photoIdentity } from './home-photo.mjs';
 
 const f1 = 'https://www.formula1.com';
 const fia = 'https://www.fia.com/regulation/category/110';
@@ -21,7 +22,8 @@ export async function circuitMedia(site, cacheDir) {
   const todo = Object.entries(races).filter(([key, race]) => {
     const current = collection[key];
     const when = Date.parse(race.sessions.race);
-    return !current?.photos?.length || current.photos.length < 10 || Date.now() - current.checked > (Math.abs(Date.now() - when) < 7 * 24 * hours ? 3 : 168) * hours;
+    const refreshHours = Math.abs(Date.now() - when) < 7 * 24 * hours ? 3 : 168;
+    return !current?.photos?.length || current.target !== circuitPhotoLimit || Date.now() - current.checked > refreshHours * hours;
   });
   const aliases = {
     'great-britain': ['british', 'silverstone'], 'barcelona-catalunya': ['barcelona', 'catalunya', 'spanish'],
@@ -52,8 +54,9 @@ export async function circuitMedia(site, cacheDir) {
           const location = compact(asset.split('/').slice(0, -1).join('/'));
           const header = /racehub/i.test(asset) && names.some(name => compact(asset).includes(name));
           if (!header && (!names.some(name => location.includes(name)) || /fallback|detailed|driver|teamlogos/i.test(asset))) continue;
-          photos.set(asset.replace(/\.[^.]+$/, ''), {
-            image: `https://media.formula1.com/image/upload/c_fit,w_1600/q_auto/v1740000001/${asset}`,
+          const image = `https://media.formula1.com/image/upload/c_fit,w_1600/q_auto/v1740000001/${asset}`;
+          photos.set(photoIdentity(image), {
+            image,
             source: officialPage,
           });
         }
@@ -62,20 +65,20 @@ export async function circuitMedia(site, cacheDir) {
       try {
         const html = await request(source, { redirect: 'follow' }).then(response => response.text()).catch(() => '');
         collect(html, source);
-        if (photos.size < 10) {
+        if (photos.size < circuitPhotoLimit) {
           const related = [...new Set([...html.matchAll(/href="(\/en\/latest\/article\/[^"?#]+)"/g)].map(match => match[1]))]
             .filter(path => names.some(name => compact(path).includes(name)) && !/live-coverage|promot|ticket/.test(path)).slice(0, 4);
           await Promise.allSettled(related.map(path => request(f1 + path).then(response => response.text()).then(page => collect(page, f1 + path))));
         }
         for (const olderYear of [year - 1, year - 2]) {
-          if (photos.size >= 10) break;
+          if (photos.size >= circuitPhotoLimit) break;
           const older = `${f1}/en/racing/${olderYear}/${slug}`;
           await request(older, { redirect: 'follow' }).then(response => response.text()).then(page => collect(page, older)).catch(() => {});
         }
         const saved = collection[key];
         const gallery = [...new Map([...photos, ...(saved?.photos || []).map(photo =>
-          [photo.image.split('/').slice(7).join('/').replace(/\.[^.]+$/, ''), photo])]).values()].slice(0, 10);
-        collection[key] = { checked: Date.now(), photos: gallery };
+          [photoIdentity(photo.image), photo])]).values()].slice(0, circuitPhotoLimit);
+        collection[key] = { checked: Date.now(), target: circuitPhotoLimit, photos: gallery };
       } catch (error) {
         console.warn(`Circuit media ${key}: ${error.message}`);
       }

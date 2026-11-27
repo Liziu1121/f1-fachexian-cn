@@ -8,12 +8,20 @@
       "ANT",
       "RUS"
     ],
-    "sources": [
-      "F1 官方成绩",
-      "Sky Sports",
-      "Motorsport.com"
+    "references": [
+      {
+        "name": "F1 官方成绩",
+        "url": "https://www.formula1.com/en/latest/article/fp1-antonelli-leads-russell-in-qatar-as-mercedes-control-opening-practice.3v7t8Oja9vAGkic9TxN7FR"
+      },
+      {
+        "name": "Sky Sports",
+        "url": "https://www.skysports.com/f1/news/13617130/qatar-gp-kimi-antonelli-dominates-first-practice-from-george-russell-at-lusail-international-circuit"
+      },
+      {
+        "name": "Motorsport.com",
+        "url": "https://www.motorsport.com/f1/news/f1-qatar-gp-fp1-report-10878251/10878251/"
+      }
     ],
-    "reference": "https://www.formula1.com/en/latest/article/fp1-antonelli-leads-russell-in-qatar-as-mercedes-control-opening-practice.3v7t8Oja9vAGkic9TxN7FR",
     "titleZh": "安东内利用中性胎领跑卡塔尔一练，拉塞尔落后 0.507 秒",
     "titleEn": "Antonelli sets the Qatar FP1 benchmark on mediums, 0.507s ahead of Russell",
     "fullTextZh": [
@@ -37,12 +45,20 @@
     "subjects": [
       "BEA"
     ],
-    "sources": [
-      "Haas F1",
-      "Sky Sports",
-      "Motorsport.com"
+    "references": [
+      {
+        "name": "Haas F1",
+        "url": "https://www.haasf1team.com/news/tgr-haas-f1-team-confirms-ollie-bearman-2027-fia-formula-1-world-championship"
+      },
+      {
+        "name": "Sky Sports",
+        "url": "https://www.skysports.com/f1/news/13610208/oliver-bearman-to-remain-with-haas-for-2027-f1-season-after-new-contract-finally-agreed-ahead-of-qatar-gp"
+      },
+      {
+        "name": "Motorsport.com",
+        "url": "https://www.motorsport.com/f1/news/oliver-bearman-locks-in-haas-f1-seat-as-2027-grid-officially-set/10877802/"
+      }
     ],
-    "reference": "https://www.haasf1team.com/news/tgr-haas-f1-team-confirms-ollie-bearman-2027-fia-formula-1-world-championship",
     "titleZh": "贝尔曼确定留在哈斯，2027 年将搭档卡马拉",
     "titleEn": "Bearman stays at Haas for 2027 alongside Câmara",
     "fullTextZh": [

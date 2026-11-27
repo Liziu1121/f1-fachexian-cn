@@ -167,8 +167,8 @@ export async function sourceReports(root, cacheDir, media, now = Date.now()) {
   ]);
   const notes = {};
   const items = [...briefings, ...cases].filter(report => Date.parse(report.date) <= now).map(report => {
-    const { id, date, round, source, titleZh, titleEn, fullTextZh, fullTextEn, subjects, sources } = report;
-    notes[id] = { title: titleZh, fullTextZh, fullTextEn, sources };
+    const { id, date, round, source, titleZh, titleEn, fullTextZh, fullTextEn, subjects, sources, references } = report;
+    notes[id] = { title: titleZh, fullTextZh, fullTextEn, sources: references?.map(reference => reference.name) ?? sources };
     return [id, new Date(date).toISOString(), titleEn, '', source === 'FIA' ? '赛事公告与裁决' : '车队与技术动态',
       media[round]?.photos?.[0]?.image || '', { title: titleZh }, { source, round, subjects, dateOnly: /^\d{4}-\d{2}-\d{2}$/.test(date) }];
   });

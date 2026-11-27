@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { officialArticleUrl, officialNewsLinks, request, xmlText } from './feeds.mjs';
 import { circuitMedia, refreshEdition } from './edition.mjs';
-import { patchHeroPhoto } from './home-photo.mjs';
+import { circuitPhotoSelection, patchHeroPhoto } from './home-photo.mjs';
 import { biliAccount, biliId, latestBilibili } from './bilibili-feed.mjs';
 import { recentDouyin } from './douyin-feed.mjs';
 import { writeReports } from './newsroom.mjs';
@@ -279,6 +279,9 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   await writeJson(join(site, 'api', 'news', 'latest.json'), feed);
   await mkdir(join(site, 'api', 'videos'), { recursive: true });
   await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, douyin: douyin.items, douyinStatus });
+  const initialCover = (await readFile(join(site, 'index.html'), 'utf8'))
+    .match(/<img\b[^>]*\bdata-hero-frame\b[^>]*\bsrc="([^"]+)"/)?.[1];
+  const photoSelection = circuitPhotoSelection(media, initialCover);
   const patch = async (asset, transform) => {
     const path = join(site, asset);
     const original = (await readFile(path, 'utf8')).replaceAll('\r\n', '\n');
@@ -288,7 +291,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
     patch('app.js', (js, replace) => patchHeroPhoto(patchNews(js, replace))),
     patch('video.js', patchVideo),
     patch('index.html', (html, replace) => patchIndex(html, replace)),
-    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliItems: videos.items, biliStatus: videos.status, feed, notes, newsStoryPhotos, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
+    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliItems: videos.items, biliStatus: videos.status, feed, notes, newsStoryPhotos, sectors, ...photoSelection }) + ';\n'),
   ]);
   console.log('Content ready: ' + feed.items.length + ' recent news items, ' + douyin.items.length + ' verified Douyin videos.');
   return feed;
