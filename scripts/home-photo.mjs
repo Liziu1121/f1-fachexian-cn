@@ -72,6 +72,8 @@ export function patchHeroPhoto(js) {
         if (currentPage!=="home" || document.hidden || heroRound()?.start!==round.start) return;
         const first=qs("[data-hero-frame].active");
         const second=qs("[data-hero-frame]:not(.active)");
+        second.width=incoming.naturalWidth;
+        second.height=incoming.naturalHeight;
         second.src=photo.image;
         second.alt="";
         second.style.setProperty("--shot-position","50% 50%");

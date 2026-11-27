@@ -43,6 +43,7 @@ async function installDashboard() {
   const addAfter = (anchor, insertion) => { html = replaceOnce(html, anchor, anchor + insertion, 'index.html'); };
   addAfter('  <link rel="stylesheet" href="./style.css">', '\n  <link rel="stylesheet" href="./live.css">');
   addAfter('  <link rel="stylesheet" href="./live.css">', '\n  <link rel="stylesheet" href="./circuit-sectors.css">');
+  addAfter('  <link rel="stylesheet" href="./circuit-sectors.css">', '\n  <link rel="stylesheet" href="./home.css">');
   addBefore('  <script defer src="./app.js"></script>',
     '  <script defer src="./circuit-sectors.js"></script>\n  <script defer src="./live.js"></script>\n  <script defer src="./regulations.js"></script>\n');
   addBefore('      <a href="#/weekend" data-nav="weekend" class="nav-weekend">',
@@ -81,6 +82,7 @@ async function installDashboard() {
   await Promise.all([
     ...[['index.html', html], ['app.js', routes], ['locale.js', labels]].map(([file, content]) => writeFile(join(site, file), content)),
     ...['live.js', 'regulations.js', 'live.css', 'circuit-sectors.js', 'circuit-sectors.css'].map(file => copyFile(join(sources, file), join(site, file))),
+    copyFile(join(root, 'home', 'hero.css'), join(site, 'home.css')),
   ]);
 }
 
@@ -96,7 +98,7 @@ async function previousSnapshot() {
 async function versionAssets() {
   const index = join(site, 'index.html');
   let page = await readText(index);
-  for (const file of ['live.css', 'circuit-sectors.css', 'content-data.js', 'circuit-sectors.js', 'live.js', 'regulations.js', 'locale.js', 'video.js', 'app.js']) {
+  for (const file of ['live.css', 'circuit-sectors.css', 'home.css', 'content-data.js', 'circuit-sectors.js', 'live.js', 'regulations.js', 'locale.js', 'video.js', 'app.js']) {
     const content = await readFile(join(site, file));
     if (file.endsWith('.js')) new Script(content.toString('utf8'), { filename: file });
     const hash = createHash('sha256').update(content).digest('hex').slice(0, 12);
