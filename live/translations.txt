@@ -148,3 +148,17 @@ F1 官网照片|F1 photo source
 检索 FIA 全套规则和附录|Search the FIA regulations and appendices
 抖音官号最新清单暂未公开，现显示已核对的归档视频。|The latest Douyin feed is unavailable. Verified archived videos are shown.
 哔哩哔哩的最新清单暂不可用，现显示已核对的归档视频。|The latest Bilibili feed is unavailable. Verified archived videos are shown.
+查看最近赛况|View latest session
+返回赛道照片|Return to circuit photos
+车手排名|Driver standings
+车手实时排名|Live driver standings
+横向滚动查看更多列。|Scroll horizontally for more columns.
+车手实时位置（估算）|Estimated live driver positions
+赛道与车手位置|Circuit and driver positions
+车队颜色和车手号码|Team colours and car numbers
+查看 F1 官方赛道图 ↗|View official F1 track map ↗
+分段计时与测速|Sector splits and speed traps
+实时分段与小段|Live sectors and mini-sectors
+领先车手详情|Session leader
+赛中排名、赛道状态和估算位置来自 TELOS。车手对比只使用本场的 OpenF1 遥测数据。赛道轮廓与名单来自 Turn One，官方赛道图来自 F1 官网。|TELOS provides live standings, track status and estimated positions. The driver comparison uses OpenF1 telemetry for the current session. Turn One provides circuit outlines and the grid. The official circuit image comes from Formula 1.
+Turn One 赛道和车手数据|Turn One circuit and driver data

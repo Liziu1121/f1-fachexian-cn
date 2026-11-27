@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { activeRadio, archiveDelay, archiveDetails, dashboardArchiveVersion, mirrorCalendar, openCalendar } from './live-data.mjs';
+import { pitwallReference } from './pitwall-data.mjs';
 import { fiaBulletins, liveNews } from './feeds.mjs';
 import { withArchiveAudio } from './radio-archive.mjs';
 import { populateRadioText } from './radio-text.mjs';
@@ -45,7 +46,7 @@ async function installDashboard() {
   addAfter('  <link rel="stylesheet" href="./live.css">', '\n  <link rel="stylesheet" href="./circuit-sectors.css">');
   addAfter('  <link rel="stylesheet" href="./circuit-sectors.css">', '\n  <link rel="stylesheet" href="./home.css">');
   addBefore('  <script defer src="./app.js"></script>',
-    '  <script defer src="./circuit-sectors.js"></script>\n  <script defer src="./live.js"></script>\n  <script defer src="./regulations.js"></script>\n');
+    '  <script defer src="./circuit-sectors.js"></script>\n  <script defer src="./pitwall.js"></script>\n  <script defer src="./live.js"></script>\n  <script defer src="./regulations.js"></script>\n');
   addBefore('      <a href="#/weekend" data-nav="weekend" class="nav-weekend">',
     '      <a href="#/live" data-nav="live" class="nav-live">比赛实况</a>\n');
   addAfter('        <a class="menu-group-title" href="#/trackside" data-nav="trackside">赛道上</a>',
@@ -81,7 +82,7 @@ async function installDashboard() {
 
   await Promise.all([
     ...[['index.html', html], ['app.js', routes], ['locale.js', labels]].map(([file, content]) => writeFile(join(site, file), content)),
-    ...['live.js', 'regulations.js', 'live.css', 'circuit-sectors.js', 'circuit-sectors.css'].map(file => copyFile(join(sources, file), join(site, file))),
+    ...['live.js', 'pitwall.js', 'regulations.js', 'live.css', 'circuit-sectors.js', 'circuit-sectors.css'].map(file => copyFile(join(sources, file), join(site, file))),
     copyFile(join(root, 'home', 'hero.css'), join(site, 'home.css')),
   ]);
 }
@@ -98,7 +99,7 @@ async function previousSnapshot() {
 async function versionAssets() {
   const index = join(site, 'index.html');
   let page = await readText(index);
-  for (const file of ['live.css', 'circuit-sectors.css', 'home.css', 'content-data.js', 'circuit-sectors.js', 'live.js', 'regulations.js', 'locale.js', 'video.js', 'app.js']) {
+  for (const file of ['live.css', 'circuit-sectors.css', 'home.css', 'content-data.js', 'circuit-sectors.js', 'pitwall.js', 'live.js', 'regulations.js', 'locale.js', 'video.js', 'app.js']) {
     const content = await readFile(join(site, file));
     if (file.endsWith('.js')) new Script(content.toString('utf8'), { filename: file });
     const hash = createHash('sha256').update(content).digest('hex').slice(0, 12);
@@ -142,6 +143,7 @@ async function buildSnapshots(newsFeed) {
   }
   const archives = candidates.filter(session => stored.has(session.key));
 
+  const pitwall = await pitwallReference(schedule, archives, previous.pitwall, now);
   const context = schedule.find(session => session.startsAt <= now) ?? archives[0];
   const current = now < context?.endsAt + archiveDelay ? context : null;
   const clips = current ? await activeRadio(current) : [];
@@ -162,7 +164,7 @@ async function buildSnapshots(newsFeed) {
   ]);
   const sameContext = context?.startsAt === previous.contextStartsAt;
   const index = {
-    generatedAt: now, schedule, archives, activeRadio: current && { session: current, clips: clips.map(radio) }, contextStartsAt: context?.startsAt,
+    generatedAt: now, schedule, archives, pitwall, activeRadio: current && { session: current, clips: clips.map(radio) }, contextStartsAt: context?.startsAt,
     news: sameContext && news.scope === 'unavailable' ? previous.news ?? news : news,
     bulletins: sameContext && bulletins.unavailable ? previous.bulletins ?? bulletins : bulletins,
   };

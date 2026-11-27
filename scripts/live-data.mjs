@@ -2,7 +2,7 @@ import { request } from './feeds.mjs';
 import { withArchiveAudio } from './radio-archive.mjs';
 
 export const archiveDelay = 30 * 60_000;
-export const dashboardArchiveVersion = 3;
+export const dashboardArchiveVersion = 4;
 const api = 'https://api.openf1.org/v1';
 let nextRequest = Promise.resolve();
 
@@ -91,7 +91,7 @@ function byDriver(items) {
 function timedLap(lap) {
   if (!lap) return null;
   return {
-    number: lap.lap_number, speed: lap.st_speed,
+    number: lap.lap_number, speed: lap.st_speed, speedTraps: [lap.i1_speed, lap.i2_speed, lap.st_speed],
     sectors: [1, 2, 3].map(i => ({
       time: lap[`duration_sector_${i}`],
       segments: lap[`segments_sector_${i}`] ?? [],
@@ -118,6 +118,31 @@ export async function activeRadio(session) {
   const [radio, drivers] = await Promise.allSettled(['team_radio', 'drivers'].map(name => openF1(name, { session_key: session.key })));
   const identity = driverIdentity(drivers.value ?? []);
   return publishedRadio(radio.value ?? [], number => identity.get(number) ?? { number });
+}
+
+async function sampledTelemetry(session, laps) {
+  const recorded = laps.map(row => Date.parse(row.date_start)).filter(Number.isFinite);
+  if (!recorded.length) return null;
+  const midpoint = session.startsAt + (session.endsAt - session.startsAt) * .67;
+  const sample = Math.min(midpoint, Math.max(...recorded));
+  if (!Number.isFinite(sample) || sample < session.startsAt) return null;
+  const params = {
+    session_key: session.key,
+    'date>': new Date(sample - 2200).toISOString(),
+    'date<': new Date(sample + 100).toISOString(),
+  };
+  const [location, speed] = await Promise.allSettled(['location', 'car_data'].map(endpoint => openF1(endpoint, params)));
+  const positions = {};
+  const speeds = {};
+  for (const row of dated(location.value ?? [])) {
+    if (!Object.hasOwn(positions, row.driver_number) && [row.x, row.y].every(Number.isFinite) && (row.x || row.y)) {
+      positions[row.driver_number] = [row.x, row.y];
+    }
+  }
+  for (const row of dated(speed.value ?? [])) {
+    if (!Object.hasOwn(speeds, row.driver_number) && Number.isFinite(row.speed)) speeds[row.driver_number] = row.speed;
+  }
+  return Object.keys(positions).length || Object.keys(speeds).length ? { at: sample, positions, speeds } : null;
 }
 
 export async function archiveDetails(session) {
@@ -155,7 +180,8 @@ export async function archiveDetails(session) {
     .map(row => ({ date: row.date, lap: row.lap_number, message: row.message, flag: row.flag }));
   const clips = publishedRadio(feeds.team_radio ?? [], driver);
   const weather = dated(feeds.weather ?? [])[0];
-  return { session, rows, events, radio: await withArchiveAudio(session, clips),
+  const [radio, telemetry] = await Promise.all([withArchiveAudio(session, clips), sampledTelemetry(session, feeds.laps ?? [])]);
+  return { session, rows, events, radio, telemetry,
     controlAvailable: Boolean(feeds.race_control), radioAvailable: Boolean(feeds.team_radio),
     weather: weather ? { date: weather.date, air: weather.air_temperature, track: weather.track_temperature,
       humidity: weather.humidity, wind: weather.wind_speed, rain: weather.rainfall } : null,
