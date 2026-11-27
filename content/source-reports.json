@@ -1,5 +1,64 @@
 [
   {
+    "id": "qatar-antonelli-medium-tyre-fp1",
+    "date": "2026-11-27T14:43:00Z",
+    "round": "qatar",
+    "source": "F1 发车线",
+    "subjects": [
+      "ANT",
+      "RUS"
+    ],
+    "sources": [
+      "F1 官方成绩",
+      "Sky Sports",
+      "Motorsport.com"
+    ],
+    "reference": "https://www.formula1.com/en/latest/article/fp1-antonelli-leads-russell-in-qatar-as-mercedes-control-opening-practice.3v7t8Oja9vAGkic9TxN7FR",
+    "titleZh": "安东内利用中性胎领跑卡塔尔一练，拉塞尔落后 0.507 秒",
+    "titleEn": "Antonelli sets the Qatar FP1 benchmark on mediums, 0.507s ahead of Russell",
+    "fullTextZh": [
+      "安东内利在卢赛尔用中性胎跑出 1:23.217，成为卡塔尔大奖赛一练最快车手。同队的拉塞尔落后 0.507 秒，红牛车手哈贾尔落后 0.661 秒。哈贾尔与拉塞尔之间实际只差 0.154 秒。",
+      "这节练习的最快圈来自中性胎。它说明梅赛德斯在一练条件下有速度。比较两位车手的最终成绩时，轮胎配方、剩余圈数和下一个计时圈的路面条件都会影响比较。",
+      "卡塔尔站每套轮胎的 27 圈限额跨场次累积，练习用掉的圈数也要计入。二练在当地 20:00、北京时间次日 01:00 开始。随着赛道转入夜间，车队还要在尝试单圈速度和为后续场次保留可用轮胎之间取舍。",
+      "迈凯伦的诺里斯和皮亚斯特里分列第四、第五，两人的差距只有 0.010 秒，维斯塔潘第六。这给二练留下了两项可比较的数据：迈凯伦两车能否缩小与榜首的差距，以及梅赛德斯换到另一种轮胎后能否保持优势。"
+    ],
+    "fullTextEn": [
+      "Kimi Antonelli put Mercedes on top in Qatar’s opening practice with a 1:23.217 on medium tyres. George Russell was 0.507 seconds behind and Red Bull’s Isack Hadjar was 0.661 seconds off the benchmark, leaving just 0.154 seconds between second and third.",
+      "That leading lap came on the medium compound. The timesheets show what each driver achieved in FP1, while compound, remaining tyre mileage and changing track conditions all matter when comparing subsequent runs.",
+      "The 27-lap limit per tyre set is cumulative across sessions at Lusail. Second practice starts at 20:00 local time, or 01:00 the following day in Beijing. With the circuit moving into night conditions, teams have to balance further single-lap tests against saving tyre mileage for the rest of the weekend.",
+      "McLaren took fourth and fifth with Lando Norris and Oscar Piastri separated by just 0.010 seconds. Max Verstappen was sixth. Two comparisons to watch in FP2 are whether both McLarens close the gap to the front and how Mercedes fares on a different compound."
+    ]
+  },
+  {
+    "id": "haas-bearman-2027",
+    "date": "2026-11-26",
+    "round": "qatar",
+    "source": "F1 发车线",
+    "subjects": [
+      "BEA"
+    ],
+    "sources": [
+      "Haas F1",
+      "Sky Sports",
+      "Motorsport.com"
+    ],
+    "reference": "https://www.haasf1team.com/news/tgr-haas-f1-team-confirms-ollie-bearman-2027-fia-formula-1-world-championship",
+    "titleZh": "贝尔曼确定留在哈斯，2027 年将搭档卡马拉",
+    "titleEn": "Bearman stays at Haas for 2027 alongside Câmara",
+    "fullTextZh": [
+      "哈斯在卡塔尔大奖赛前确定，奥利弗·贝尔曼将代表车队参加 2027 年 F1 世界锦标赛。这将是他连续第三年作为哈斯正式车手参赛。拉斐尔·卡马拉的席位此前已确认，车队两名车手由此都已确定。",
+      "两人已经开始合作。卡马拉在今年圣保罗站首次为哈斯出赛，车队把赛季最后几站安排给他，为下赛季的全职参赛做准备。相比等到明年揭幕战才建立配合，哈斯现在就能用比赛周末检验两名车手的反馈和调校方向。",
+      "据哈斯公告，续约宣布时贝尔曼已在 F1 正赛发车 48 次，职业生涯累计 71 分。他为哈斯取得的代表性成绩包括 2025 年墨西哥城站第四，以及 2026 年中国站第五。",
+      "这次确认的是 2027 年哈斯席位。对卡马拉而言，下赛季首次完整参赛时会有一名熟悉车队的队友作参照。对贝尔曼而言，第三个赛季能检验他能否把偶尔的高位完赛转化为更稳定的得分。"
+    ],
+    "fullTextEn": [
+      "Haas has confirmed Oliver Bearman for the 2027 Formula 1 championship ahead of the Qatar Grand Prix. It will be his third consecutive full season with the team. Rafael Câmara had already been named for the other seat, completing the pairing.",
+      "They have already started working together. Câmara made his debut for Haas in São Paulo this year and was given the closing rounds to prepare for his first full campaign. Haas can use those weekends to compare feedback and setup preferences before next season begins.",
+      "Haas counted 48 Grand Prix starts and 71 career points for Bearman at the time of the announcement. His stand-out results for the team include fourth in Mexico City in 2025 and fifth in China in 2026.",
+      "The announcement confirms Bearman’s Haas seat for 2027. For Câmara, that means a benchmark from a team-mate who already knows the operation. For Bearman, the next step is turning his strongest finishes into more regular scoring."
+    ]
+  },
+  {
     "id": "qatar-tyre-stint-limit",
     "date": "2026-11-24",
     "round": "qatar",

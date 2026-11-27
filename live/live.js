@@ -36,6 +36,10 @@
     ['Practice 1', '一练'], ['Practice 2', '二练'], ['Practice 3', '三练'], ['Qualifying', '排位赛'],
     ['Sprint Qualifying', '冲刺排位赛'], ['Sprint Shootout', '冲刺排位赛'], ['Sprint', '冲刺赛'], ['Race', '正赛'],
   ]);
+  const sessionCodes = {
+    fp1: 'Practice 1', fp2: 'Practice 2', fp3: 'Practice 3', q: 'Qualifying',
+    sq: 'Sprint Qualifying', sprint: 'Sprint', race: 'Race',
+  };
   const english = () => window.F1_LOCALE.english();
   let visible = false;
   let timer;
@@ -115,12 +119,19 @@
 
   const measurement = (value, unit, digits = 0) => Number.isFinite(value) ? `${value.toFixed(digits)} ${unit}` : '—';
 
-  function upcomingRound(now = Date.now()) {
-    return Object.entries(window.F1_DATA.races).map(([course, race]) => {
-      const starts = Object.entries(race.sessions).filter(([key]) => key !== 'grid')
-        .map(([, stamp]) => Date.parse(stamp)).filter(Number.isFinite).sort((a, b) => a - b);
-      return { course, start: starts.find(stamp => stamp > now), race: Date.parse(race.sessions.race) };
-    }).filter(round => round.race > now && round.start).sort((a, b) => a.start - b.start)[0];
+  function upcomingSession(now = Date.now()) {
+    const schedule = snapshot?.index?.schedule ?? [];
+    const next = schedule.reduce((nearest, session) =>
+      sessionNames.has(session.name) && session.startsAt > now &&
+        (!nearest || session.startsAt < nearest.startsAt) ? session : nearest, null);
+    if (next) {
+      const paired = sessionCircuit(next) || schedule.filter(session => next.meeting != null && session.meeting === next.meeting)
+        .map(sessionCircuit).find(Boolean);
+      return { course: paired?.[0], place: next.location || next.circuit, start: next.startsAt, name: next.name };
+    }
+    return Object.entries(window.F1_DATA.races).flatMap(([course, race]) =>
+      Object.entries(race.sessions).map(([code, stamp]) => ({ course, start: Date.parse(stamp), name: sessionCodes[code] })))
+      .filter(session => session.name && session.start > now).sort((a, b) => a.start - b.start)[0];
   }
 
   function setGalleryControls(available) {
@@ -172,28 +183,32 @@
     }
   }
 
-  function updateCountdown() {
-    const count = byId('liveGalleryCountdown');
-    if (!visible || byId('liveGallery').hidden) return;
-    const round = upcomingRound();
-    if (!round) return setText(count.id, '下一站赛程待公布');
-    const minutes = Math.max(0, Math.ceil((round.start - Date.now()) / 60_000));
-    const name = content.circuit[round.course]?.[english() ? 1 : 0] || round.course;
-    setText(count.id, language(
-      `距下一站赛事 · ${name} · ${Math.floor(minutes / 1440)} 天 ${Math.floor(minutes / 60) % 24} 小时 ${minutes % 60} 分钟`,
-      `Next round · ${name} · ${Math.floor(minutes / 1440)}d ${Math.floor(minutes / 60) % 24}h ${minutes % 60}m`));
+  function updateCountdown(next = upcomingSession(), now = Date.now()) {
+    if (!visible || gallery.hidden) return;
+    const label = byId('liveGallerySession');
+    label.hidden = !next;
+    if (!next) return setText('liveGalleryCountdown', language('下一场赛程待公布', 'Next session schedule pending'));
+    const minutes = Math.max(0, Math.ceil((next.start - now) / 60_000));
+    const name = content.circuit[next.course]?.[english() ? 1 : 0] || next.place || '';
+    const type = english() ? next.name : sessionNames.get(next.name);
+    setText(label.id, language(`下一场 · ${type}`, `Next session · ${type}`));
+    setText('liveGalleryCountdown', language(
+      `${name} · 北京时间 ${dateTime(next.start)} · 距开始 ${Math.floor(minutes / 1440)} 天 ${Math.floor(minutes / 60) % 24} 小时 ${minutes % 60} 分钟`,
+      `${name} · ${dateTime(next.start)} Beijing time · Starts in ${Math.floor(minutes / 1440)}d ${Math.floor(minutes / 60) % 24}h ${minutes % 60}m`));
   }
 
   function drawGallery() {
+    const now = Date.now();
+    const next = upcomingSession(now);
     const latest = Object.entries(window.F1_DATA.races).reduce((recent, [course, race]) => {
       const date = Date.parse(race.sessions.race);
-      return date <= Date.now() && date > (recent?.date ?? 0) ? { course, date } : recent;
+      return date <= now && date > (recent?.date ?? 0) ? { course, date } : recent;
     }, null);
-    const course = upcomingRound()?.course || latest?.course;
+    const course = next?.course || latest?.course;
     if (galleryCourse !== course) { galleryCourse = course; galleryIndex = 0; }
-    setText('liveGalleryTitle', content.circuit[course]?.[english() ? 1 : 0] || '比赛实况');
+    setText('liveGalleryTitle', content.circuit[course]?.[english() ? 1 : 0] || next?.place || language('比赛实况', 'Live Centre'));
     displayGallery();
-    updateCountdown();
+    updateCountdown(next, now);
   }
 
   for (const [id, step] of [['liveGalleryPrevious', -1], ['liveGalleryNext', 1]]) {

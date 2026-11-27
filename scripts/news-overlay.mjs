@@ -41,11 +41,13 @@ export function patchNews(js, replace) {
     '      }',
     '      if (info?.source) article.source=info.source;',
     '      if (info?.dateOnly) article.dateOnly=true;',
-    '      if (info?.photoReference && image) {',
+    '      if (info?.photoReference) {',
     '        if (article.image!==image || !article.photoReference) changed.add(id);',
     '        article.image=image;',
     '        article.photoReference=true;',
     '        article.photoArchived=info.photoArchived;',
+    '        article.photoKind=info.photoKind;',
+    '        article.photoPeople=info.photoPeople;',
     '      }',
     '      if (info?.url && article.sourceUrl!==info.url) {',
     '        article.sourceUrl=info.url;',
@@ -104,9 +106,36 @@ export function patchNews(js, replace) {
     '  }');
   edit('return item.stamp?time(item.stamp):item.date||snapshot;',
     'return item.dateOnly?new Intl.DateTimeFormat(window.F1_LOCALE.english()?"en-GB":"zh-CN",{month:"long",day:"numeric",timeZone:"UTC"}).format(new Date(item.stamp)):item.stamp?time(item.stamp):item.date||snapshot;');
-  edit('    const src=item.archived?item.image:photoBase+"c_fit,w_"+width+"/q_auto/v1740000001/"+item.image;',
-    '    const src=item.photoReference?item.image.replace("/c_fit,w_1600/","/c_fit,w_"+width+"/"):'+
-    'item.archived?item.image:photoBase+"c_fit,w_"+width+"/q_auto/v1740000001/"+item.image;');
+  const coverStart = js.indexOf('  function newsCover(');
+  const coverEnd = js.indexOf('  function newsDate(', coverStart);
+  if (coverStart < 0 || coverEnd < 0) throw new Error('News cover integration point unavailable');
+  js = js.slice(0, coverStart) + `  function newsCover(item,width,lazy,detail=false) {
+    const en=window.F1_LOCALE.english();
+    const names=newsExtras.newsPeople;
+    const title=" "+(item.titleEn||item.en?.[0]||"").normalize("NFD").replace(/\\p{Diacritic}/gu,"").toLowerCase()
+      .replace(/[^a-z0-9]+/g," ").trim()+" ";
+    const portraits=(item.photoReference?item.photoPeople||[]:Object.keys(names)
+      .filter(code=>title.includes(" "+names[code].surname+" ")).slice(0,3)).map(code=>names[code]).filter(Boolean);
+    const image=(src,alt)=>'<img src="'+safe(src)+'" alt="'+safe(alt)+'" decoding="async"'+
+      (lazy?' loading="lazy"':'')+'>';
+    let kind=item.photoKind, markup="", caption="";
+    if(portraits.length) {
+      kind="portrait";
+      const label=person=>en?person.en:person.zh;
+      markup='<div class="news-portraits">'+portraits.map(person=>image(person.image,detail?label(person):"")).join("")+'</div>';
+      caption=(en?"Official driver portraits · ":"F1 官方人物照 · ")+portraits.map(label).join(en?", ":"、");
+    } else if(item.photoReference&&item.image) {
+      const src=item.image.replace("/c_fit,w_1600/","/c_fit,w_"+width+"/");
+      const label=kind==="circuit"?(en?"Official circuit map":"F1 官方赛道图"):
+        item.photoArchived?(en?"Archive photo · Formula 1":"资料图 · F1 官方"):
+        (en?"Illustrative photo · Formula 1":"配图 · F1 官方");
+      markup=image(src,detail&&kind==="circuit"?label:"");
+      caption=label;
+    }
+    return {kind,markup,caption};
+  }
+
+` + js.slice(coverEnd);
   const cardStart = js.indexOf('  function newsCard(');
   const archiveStart = js.indexOf('  function drawNewsArchive(', cardStart);
   if (cardStart < 0 || archiveStart < 0) throw new Error('News cards integration point unavailable');
@@ -139,8 +168,9 @@ export function patchNews(js, replace) {
     const en=window.F1_LOCALE.english();
     const available=hasNewsBody(item,en);
     const label=available?(en?"Read on this site":"站内阅读"):(en?"Full text unavailable":"暂无站内全文");
+    const visual=cover?newsCover(item,lead?1200:cover==="thumb"?480:760,!lead):null;
     return '<article class="news-card'+(lead?' news-lead':'')+'">'+
-      (cover&&item.image?'<div class="news-visual">'+newsCover(item,lead?1200:cover==="thumb"?480:760,!lead)+'</div>':'')+
+      (visual?.markup?'<div class="news-visual" data-photo-kind="'+safe(visual.kind)+'">'+visual.markup+'</div>':'')+
       '<div class="news-card-copy"><div class="race-kicker">'+safe(item.source||"F1")+" · "+safe(newsDate(item))+'</div><h2>'+
       '<button class="news-title-button" type="button" data-news-entry="'+safe(item.id)+'">'+safe(title)+'</button></h2>'+
       '<span class="sub">'+label+'</span></div></article>';
@@ -169,16 +199,18 @@ export function patchNews(js, replace) {
       const en=window.F1_LOCALE.english();
       const {title}=newsText(article,en);
       const body=newsBody(article,en);
-      const caption=(en?article.captionEn||article.caption:article.caption)||
-        (article.photoReference?(en?(article.photoArchived?"Archive photo · Formula 1":"Illustrative photo · Formula 1"):
-          (article.photoArchived?"资料图 · F1 官方":"配图 · F1 官方")):"");
+      const visual=newsCover(article,1280,false,true);
+      const sources=newsExtras.notes[id]?.sources;
+      const attribution=sources?.length?
+        '<p class="news-attribution sub">'+(en?"Reporting checked against ":"核对来源 · ")+safe(sources.join(" · "))+'</p>':"";
       const context=newsSessions[article.id];
       const unavailable=en?"This report has no full text available on this site.":"此报道暂未提供可在本站刊登的全文。";
       detail.innerHTML='<button type="button" class="action news-back" data-news-entry="">'+(en?"Back to reports":"返回新闻列表")+'</button>'+
         '<header><p class="eyebrow">'+safe(article.source||"F1")+' · '+safe(newsDate(article))+'</p>'+
         '<h1 class="page-title" tabindex="-1">'+safe(title)+'</h1></header>'+
-        (article.image?'<figure>'+newsCover(article,1280)+(caption?'<figcaption>'+safe(caption)+'</figcaption>':'')+'</figure>':'')+
-        '<div class="news-body">'+(body||'<p class="sub">'+unavailable+'</p>')+
+        (visual.markup?'<figure data-photo-kind="'+safe(visual.kind)+'">'+visual.markup+
+          '<figcaption>'+safe(visual.caption)+'</figcaption></figure>':'')+
+        '<div class="news-body">'+(body||'<p class="sub">'+unavailable+'</p>')+attribution+
         (context?'<section class="news-session">'+newsSessionBody(...context,en)+'</section>':'')+'</div>';
       return;
     }
@@ -198,7 +230,9 @@ export function patchNews(js, replace) {
     '    return lead?[lead,...candidates.filter(item=>item.id!==lead.id)].slice(0,4):[];');
   edit('    if (image.matches?.(".following-track-image[data-layout]")) {',
     '    if (image.matches?.(".news-visual img,.news-detail figure img")) {\n'+
-    '      image.closest(".news-visual,figure").classList.add("photo-unavailable");\n'+
+    '      const container=image.closest(".news-visual,figure");\n'+
+    '      image.classList.add("portrait-unavailable");\n'+
+    '      if (!container.querySelector("img:not(.portrait-unavailable)")) container.classList.add("photo-unavailable");\n'+
     '      return;\n'+
     '    }\n'+
     '    if (image.matches?.(".following-track-image[data-layout]")) {');

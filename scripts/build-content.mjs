@@ -7,7 +7,7 @@ import { biliAccount, biliId, latestBilibili } from './bilibili-feed.mjs';
 import { recentDouyin } from './douyin-feed.mjs';
 import { writeReports } from './newsroom.mjs';
 import { patchNews } from './news-overlay.mjs';
-import { newsImages } from './news-images.mjs';
+import { newsImages, newsPhotoCatalog } from './news-images.mjs';
 import { sourceReports } from './source-reports.mjs';
 
 const han = value => typeof value === 'string' && /\p{Script=Han}/u.test(value);
@@ -261,8 +261,8 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   douyin.items = [...new Map([...douyin.items, ...publicItems].filter(item => /^\d{19}$/.test(item.id) &&
     Number.isFinite(Date.parse(item.stamp)) && typeof item.title === 'string').map(item => [item.id, item])).values()]
     .sort((a, b) => Date.parse(b.stamp) - Date.parse(a.stamp));
-  const [externalNews, editorial, sourced] = await Promise.all([
-    buildNews(site, cacheDir, notes, edition), writeReports(site, media), sourceReports(root, cacheDir, media),
+  const [externalNews, editorial, sourced, photoCatalog] = await Promise.all([
+    buildNews(site, cacheDir, notes, edition), writeReports(site, media), sourceReports(root, cacheDir, media), newsPhotoCatalog(site),
   ]);
   Object.assign(notes, editorial.notes, licensed.notes, sourced.notes);
   const originalItems = [...editorial.items, ...licensed.items, ...sourced.items, ...externalNews.items].map(row => {
@@ -271,7 +271,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
       (note?.fullTextEn?.length || note?.bodyEn?.length));
     return [...row.slice(0, 7), { ...row[7], onSite }];
   }).sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
-  const feed = { ...externalNews, items: newsImages(originalItems, notes, media, externalNews.items), leadId: originalItems.find(row => row[7].onSite)?.[0] };
+  const feed = { ...externalNews, items: newsImages(originalItems, notes, media, externalNews.items, photoCatalog), leadId: originalItems.find(row => row[7].onSite)?.[0] };
   await writeJson(join(site, 'api', 'news', 'latest.json'), feed);
   await mkdir(join(site, 'api', 'videos'), { recursive: true });
   await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, douyin: douyin.items, douyinStatus });
@@ -284,7 +284,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
     patch('app.js', (js, replace) => patchHeroPhoto(patchNews(js, replace))),
     patch('video.js', patchVideo),
     patch('index.html', (html, replace) => patchIndex(html, replace)),
-    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliItems: videos.items, biliStatus: videos.status, feed, notes, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
+    writeFile(join(site, 'content-data.js'), 'window.F1_CONTENT_EXTRAS=' + JSON.stringify({ douyin, biliItems: videos.items, biliStatus: videos.status, feed, notes, newsPeople: photoCatalog.people, sectors, galleries: Object.fromEntries(Object.entries(media).map(([key, item]) => [key, item.photos])) }) + ';\n'),
   ]);
   console.log('Content ready: ' + feed.items.length + ' recent news items, ' + douyin.items.length + ' verified Douyin videos.');
   return feed;
