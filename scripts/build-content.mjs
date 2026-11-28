@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { officialArticleUrl, officialNewsLinks, request, xmlText } from './feeds.mjs';
@@ -270,18 +271,24 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   Object.assign(notes, desk.notes);
   const merged = new Map([...externalNews.items, ...editorial.items, ...licensed.items, ...sourced.items, ...desk.items]
     .map(row => [row[0], row]));
+  const publishedNotes = {};
   const originalItems = [...merged.values()].map(row => {
     const note = notes[row[0]];
     const onSite = Boolean((note?.fullTextZh?.length || note?.body?.length) &&
       (note?.fullTextEn?.length || note?.bodyEn?.length));
-    return [...row.slice(0, 7), { ...row[7], onSite }];
+    if (!onSite) return [...row.slice(0, 7), { ...row[7], onSite }];
+    const bodyRevision = createHash('sha256').update(JSON.stringify(note)).digest('hex').slice(0, 16);
+    const versioned = { ...note, revision: bodyRevision };
+    publishedNotes[row[0]] = versioned;
+    notes[row[0]] = versioned;
+    return [...row.slice(0, 7), { ...row[7], onSite, bodyRevision }];
   }).sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
   const photoEvidence = await editorialPhotos(root, cacheDir, externalNews.items, photoCatalog);
   const feed = { ...externalNews, items: newsImages(originalItems, notes, media, externalNews.items, photoCatalog, photoEvidence),
     leadId: originalItems.find(row => row[7].onSite)?.[0] };
   const newsStoryPhotos = Object.fromEntries(photoEvidence.flatMap(photo => (photo.stories || [])
     .map(id => [id, { image: photo.url, photoCaption: { zh: photo.captionZh, en: photo.captionEn } }])));
-  await writeJson(join(site, 'api', 'news', 'generated.json'), desk.notes);
+  await writeJson(join(site, 'api', 'news', 'generated.json'), publishedNotes);
   await writeJson(join(site, 'api', 'news', 'latest.json'), feed);
   await mkdir(join(site, 'api', 'videos'), { recursive: true });
   await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, douyin: douyin.items, douyinStatus });

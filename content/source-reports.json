@@ -1,5 +1,188 @@
 [
   {
+    "id": "qatar-pirelli-friday-wear-saturday",
+    "date": "2026-11-28T13:07:25Z",
+    "round": "qatar",
+    "source": "F1 发车线",
+    "references": [
+      {
+        "name": "Motorsport.com",
+        "url": "https://www.motorsport.com/f1/news/100-wear-in-15-laps-f1s-tyre-challenges-in-qatar-more-extreme-than-pirelli-expected/10878479/"
+      },
+      {
+        "name": "Sky Sports",
+        "url": "https://www.skysports.com/f1/news/13617140/qatar-gp-kimi-antonelli-completes-friday-practice-double-as-mercedes-dominate-despite-red-flag-interruptions"
+      },
+      {
+        "name": "FIA 赛事轮胎文件",
+        "url": "https://www.fia.com/system/files/decision-document/2026_qatar_grand_prix_-_competition_notes_-_pirelli_preview_v2.pdf"
+      },
+      {
+        "name": "PlanetF1 引述倍耐力声明",
+        "url": "https://www.planetf1.com/news/qatar-grand-prix-pirelli-tyre-pressures-27-lap-limit"
+      }
+    ],
+    "titleZh": "卡塔尔轮胎磨耗超预期，倍耐力周六维持单套 27 圈上限",
+    "titleEn": "Pirelli keeps Qatar’s 27-lap limit after heavier than expected Friday wear",
+    "fullTextZh": [
+      "倍耐力检查了卡塔尔站周五练习使用的轮胎。其首席工程师西蒙尼·贝拉向 Motorsport.com 透露，车队做重油长跑时，个别轮胎约 15 圈就有局部磨耗指标达到 100%。两场练习还出现了碎石划伤轮胎的情况。",
+      "倍耐力曾考虑调整最低胎压或单套轮胎圈数。周六，PlanetF1 引述倍耐力的声明称，两项规定维持原定标准。国际汽联的赛事文件给出的单套上限为 27 圈。",
+      "卡塔尔站正赛计划跑 57 圈。两套轮胎即使各用满 27 圈也只够 54 圈，因此跑完规定距离需要至少三套轮胎。实际何时进站仍要看磨耗、赛道碎石和车队在练习收集到的数据。"
+    ],
+    "fullTextEn": [
+      "Pirelli found heavier wear than expected after Friday practice in Qatar. Chief engineer Simone Berra told Motorsport.com that some tyres reached 100% wear in certain areas after about 15 laps of high-fuel running. The practice tyres also showed cuts caused by gravel.",
+      "The supplier considered whether to change the minimum tyre pressures or the mileage allowed on each set. On Saturday, PlanetF1 reported that Pirelli had decided to retain both prescriptions. The FIA event notes specify a maximum of 27 laps per set.",
+      "A full Qatar Grand Prix is scheduled to run for 57 laps. Two sets used to their limit cover 54, so a driver needs at least three sets to complete that distance. Measured wear and the amount of debris on track can bring stops forward."
+    ]
+  },
+  {
+    "id": "fia-studies-drs-push-to-pass-2030",
+    "date": "2026-11-28T13:07:25Z",
+    "round": "qatar",
+    "source": "F1 发车线",
+    "references": [
+      {
+        "name": "Autosport 对通巴西斯的采访",
+        "url": "https://www.autosport.com/f1/news/fia-explores-drs-return-alongside-push-to-pass-system-for-f1s-v8-engines/10878582/"
+      },
+      {
+        "name": "Motorsport.com",
+        "url": "https://www.motorsport.com/f1/news/fia-considering-return-of-drs-alongside-push-to-pass-for-f1-in-2030/10878475/"
+      },
+      {
+        "name": "FIA 动力单元框架",
+        "url": "https://api.fia.com/news/v8-future-unanimous-agreement-reached-fias-2030-formula-1-power-unit-framework"
+      },
+      {
+        "name": "F1 官网",
+        "url": "https://www.formula1.com/en/latest/article/fia-confirms-unanimous-agreement-on-framework-for-2030-power-units.AZ7EFvWPyGPH0xG1JS8Ud"
+      }
+    ],
+    "titleZh": "FIA 研究 2030 年并用 DRS 和电力超车辅助，方案仍在模拟",
+    "titleEn": "FIA studies combining DRS and push-to-pass for 2030",
+    "fullTextZh": [
+      "国际汽联正在为 2030 年动力单元规则研究超车辅助方案。单座赛车负责人尼古拉斯·通巴西斯在 Autosport 周六发布的采访中表示，模拟选项包括同时使用可减小尾翼阻力的 DRS 与短时释放电力的超车按钮。",
+      "这两项装置作用不同。打开尾翼可以降低直道阻力，电力辅助则为车手提供额外动力。通巴西斯说，模拟会帮助 FIA 判断是否需要并用，以及超车辅助应有多强。其目标是让车手带着争夺进入制动区。",
+      "FIA 已公布 2030 年动力单元拟采用的 V8 技术框架，完整规则仍待世界汽车运动理事会批准。具体超车装置、使用条件及配套细节也尚未敲定。"
+    ],
+    "fullTextEn": [
+      "The FIA is studying overtaking aids for the 2030 Formula 1 rules. Its single-seater director Nikolas Tombazis told Autosport that the options under simulation include using a drag-reducing rear wing together with a short burst of electrical power.",
+      "Opening the rear wing cuts drag, while push-to-pass adds power. Tombazis said the simulations would help the FIA decide whether both are needed and how much assistance to give. The aim is for drivers to contest a move into the braking zone.",
+      "The FIA has announced a framework for the next V8 power unit. The complete rules are due to go before the World Motor Sport Council, and the choice of overtaking devices and the conditions for using them remain open."
+    ]
+  },
+  {
+    "id": "williams-vowles-explains-2025-cost-cap",
+    "date": "2026-11-28T13:07:25Z",
+    "round": "qatar",
+    "source": "F1 发车线",
+    "references": [
+      {
+        "name": "Sky Sports",
+        "url": "https://www.skysports.com/f1/news/13616434/williams-in-minor-breach-of-f1-cost-cap-and-take-financial-and-wind-tunnel-time-penalties"
+      },
+      {
+        "name": "Motorsport.com",
+        "url": "https://www.motorsport.com/f1/news/why-williams-breached-the-2025-f1-cost-cap/10878544/"
+      },
+      {
+        "name": "FIA 卡塔尔站周五发布会",
+        "url": "https://www.fia.com/news/f1-2026-qatar-grand-prix-friday-press-conference-transcript"
+      },
+      {
+        "name": "FIA 违规协议摘要",
+        "url": "https://www.fia.com/sites/default/files/summary_aba_for_public_disclosure_-_wgpe_0.pdf"
+      }
+    ],
+    "titleZh": "沃尔斯解释威廉姆斯 2025 年支出超标，争议源于重组费用",
+    "titleEn": "Vowles explains how restructuring put Williams over the 2025 cost cap",
+    "fullTextZh": [
+      "威廉姆斯领队詹姆斯·沃尔斯在卡塔尔站发布会上解释，车队对公司重组费用的处理方式，使 2025 年申报支出超过预算帽。威廉姆斯原本把相关费用视为预算帽之外的开支，FIA 则认定应纳入计算。",
+      "按照沃尔斯的说法，重组涉及把合约从一个公司实体转到另一个实体，FIA 将相关支出归入采购。国际汽联公布的协议摘要认定超额 62.7 万英镑，相当于当年限额的 0.48%，并认定同时存在程序性违规。",
+      "威廉姆斯接受了违规协议，包括缴纳罚款和减少空气动力学测试配额。FIA 称车队在审查中配合，并称没有证据表明威廉姆斯因此获得了竞技或其他优势。"
+    ],
+    "fullTextEn": [
+      "Williams team principal James Vowles said at the Qatar Grand Prix that the team’s treatment of corporate restructuring costs put it over the 2025 cost cap. Williams had treated the costs as outside the cap, while the FIA included them.",
+      "Vowles said the restructuring moved contracts from one company entity to another and the FIA treated the associated expense as procurement. The published agreement records an overspend of £627,000, or 0.48% of the limit, and identifies a procedural breach as well.",
+      "Williams accepted a financial penalty and a reduction in aerodynamic testing allowance. The FIA said the team had cooperated with its review and that it had found no evidence of a sporting or other advantage from the breach."
+    ]
+  },
+  {
+    "id": "6mwnUPpxnOsIv6YJ7O6Lgm",
+    "date": "2026-11-28T13:07:25Z",
+    "round": "qatar",
+    "source": "F1 官方来源",
+    "subjects": [
+      "NOR",
+      "PIA"
+    ],
+    "references": [
+      {
+        "name": "F1 官网",
+        "url": "https://www.formula1.com/en/latest/article/i-dont-think-weve-been-further-off-norris-worried-by-mclarens-deficit-to-mercedes-in-qatar.6mwnUPpxnOsIv6YJ7O6Lgm"
+      },
+      {
+        "name": "Motorsport.com",
+        "url": "https://www.motorsport.com/f1/news/lando-norris-mercedes-at-a-different-level-in-qatar/10878432/"
+      },
+      {
+        "name": "Sky Sports",
+        "url": "https://www.skysports.com/f1/news/13617140/qatar-gp-kimi-antonelli-completes-friday-practice-double-as-mercedes-dominate-despite-red-flag-interruptions"
+      },
+      {
+        "name": "F1 官方二练成绩",
+        "url": "https://www.formula1.com/en/results/2026/races/1301/qatar/practice/2"
+      }
+    ],
+    "titleZh": "迈凯伦周六计划换回新版底板，诺里斯认为追赶梅赛德斯仍有差距",
+    "titleEn": "Norris says McLaren’s new floor offers a step as Mercedes sets the pace",
+    "fullTextZh": [
+      "诺里斯以第三名结束卡塔尔第二次练习赛，比榜首安东内利慢 0.445 秒。皮亚斯特里排第四，只比队友慢 0.027 秒。两辆迈凯伦的排位接近，但诺里斯在周五练习后表示，梅赛德斯依然领先明显。",
+      "迈凯伦周五使用了旧版底板。车队比赛总监兰迪·辛格解释，车队看到有赛车在路肩上损伤底板，因此把新版留到周六。诺里斯预计新版底板能带来一些收益，同时认为这项改动难以填平与梅赛德斯的差距。",
+      "二练的轮胎和跑圈安排也影响了成绩表。诺里斯的最快圈来自软胎，安东内利用的是中性胎，多次红旗打断了周五的试跑。换上新底板后的第三练习和排位赛会给两辆迈凯伦更多可比数据。"
+    ],
+    "fullTextEn": [
+      "Lando Norris finished Qatar FP2 in third, 0.445 seconds behind Kimi Antonelli. Oscar Piastri was fourth, 0.027 seconds behind his team-mate. Norris said after practice that Mercedes still had a clear advantage.",
+      "McLaren ran its older floor on Friday. Racing director Randy Singh said the team wanted to protect the newer parts after seeing other cars damage floors over kerbs. The newer floor is due back on Saturday. Norris expects some improvement from the change and sees a larger gap to Mercedes.",
+      "Tyre choice and interrupted running complicate the Friday comparison. Norris set his best lap on softs and Antonelli used mediums. Final practice and qualifying give McLaren a chance to see how the updated floor works at Lusail."
+    ]
+  },
+  {
+    "id": "zvqj1nQ6dBT2PSxEzzKWP",
+    "date": "2026-11-28T13:07:25Z",
+    "round": "qatar",
+    "source": "F1 官方来源",
+    "subjects": [
+      "VER"
+    ],
+    "references": [
+      {
+        "name": "F1 官网",
+        "url": "https://www.formula1.com/en/latest/article/a-bit-of-a-difficult-day-verstappen-and-red-bull-left-looking-for-car-balance-after-friday-in-qatar.zvqj1nQ6dBT2PSxEzzKWP"
+      },
+      {
+        "name": "Motorsport.com",
+        "url": "https://www.motorsport.com/f1/news/max-verstappen-feels-a-disconnect-as-red-bull-looks-to-solve-massive-limitation-in-qatar-gp-practice/10878436/"
+      },
+      {
+        "name": "Sky Sports",
+        "url": "https://www.skysports.com/f1/news/13617140/qatar-gp-kimi-antonelli-completes-friday-practice-double-as-mercedes-dominate-despite-red-flag-interruptions"
+      }
+    ],
+    "titleZh": "红牛调整卡塔尔高速弯平衡，维斯塔潘周五两练分列第六和第五",
+    "titleEn": "Red Bull tackles understeer after Verstappen’s difficult Friday at Lusail",
+    "fullTextZh": [
+      "维斯塔潘在卡塔尔站一练排第六，二练升至第五。队友哈贾尔一练第三，二练第六。维斯塔潘赛后把圈速损失的一部分归因于赛车平衡，称赛车前后反应还不够协调。",
+      "红牛技术总监皮埃尔·瓦谢表示，两辆车在一练均出现比预期更明显的转向不足，维斯塔潘受影响更大。车队在二练前做了调整，方向有所改善，但仍有取舍。瓦谢在接受 Motorsport.com 采访时，把问题指向中高速弯对前部的要求，同时强调调整需要兼顾入弯稳定性。",
+      "梅赛德斯包揽周五两场练习的前两名。红牛在排位赛前有一节练习可以复核改动，尤其是看看前轴响应好转之后，入弯时的稳定性是否还能维持。"
+    ],
+    "fullTextEn": [
+      "Max Verstappen finished sixth in Qatar’s opening practice and fifth in FP2. Red Bull team-mate Isack Hadjar went from third to sixth. Verstappen attributed some of the time loss to the car’s balance, describing a lack of connection between its front and rear.",
+      "Technical director Pierre Waché said both cars had more understeer than expected in FP1, with Verstappen affected more. Changes before FP2 helped at the cost of some compromises. Waché told Motorsport.com that the team needed to improve the front end through medium- and high-speed corners while maintaining stability on entry.",
+      "Mercedes finished one-two in both Friday sessions. Red Bull has one more practice before qualifying to check whether further work on the front end can improve rotation without making the car harder to manage on the way into a corner."
+    ]
+  },
+  {
     "id": "original-source-b1b1ad0ccf04ef97f380",
     "date": "2026-11-28T02:15:00Z",
     "round": "qatar",

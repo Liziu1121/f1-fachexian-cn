@@ -1,7 +1,7 @@
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { newsWindow } from './edition.mjs';
-import { request, xmlText } from './feeds.mjs';
+import { xmlText } from './feeds.mjs';
 
 const hour = 3600_000;
 const originalLimit = 5;
@@ -13,11 +13,11 @@ const publishers = new Map([
 const ignored = /\b(?:f1 academy|quiz|betting|schedule and how to watch|buy tickets)\b/i;
 const stop = new Set('the for and that with from this says after what why how was grand prix formula will day get could goes'.split(' '));
 const words = text => new Set((text.toLowerCase().match(/[a-z]{3,}/g) || []).filter(word => !stop.has(word)));
-function validSource(row) {
-  const rule = publishers.get(row[7]?.source);
+function publisherUrl(value, source) {
+  const rule = publishers.get(source);
   if (!rule) return false;
   try {
-    const url = new URL(row[7].url);
+    const url = new URL(value);
     return url.protocol === 'https:' && url.hostname === rule[0] && rule[1].test(url.pathname);
   } catch { return false; }
 }
@@ -35,14 +35,23 @@ function sourceBody(html, source) {
 }
 
 async function readSource(row) {
-  const url = new URL(row[7].url);
-  if (row[7].source === 'Sky Sports') {
+  const publisher = row[7].source;
+  let url = new URL(row[7].url);
+  if (publisher === 'Sky Sports') {
     url.pathname = url.pathname.replace(/^\/f1\/news\/\d{4,5}\/(?=\d+\/)/, '/f1/news/');
   }
-  const html = await request(url).then(response => response.text());
-  const body = sourceBody(html, row[7].source);
-  if (body.length < 330) return null;
-  return { publisher: row[7].source, title: row[2], url: row[7].url, body };
+  for (let hop = 0; hop < 3; hop++) {
+    if (!publisherUrl(url, publisher)) return null;
+    const response = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(7500) });
+    if (response.ok) {
+      const body = sourceBody(await response.text(), publisher);
+      return body.length >= 330 ? { publisher, title: row[2], url: url.href, body } : null;
+    }
+    const location = response.headers.get('location');
+    if (![301, 302, 303, 307, 308].includes(response.status) || !location) return null;
+    url = new URL(location, url);
+  }
+  return null;
 }
 
 const sessionReport = /^\/en\/latest\/article\/(fp[123]|sprint-qualifying|qualifying|sprint|race)-/;
@@ -70,12 +79,20 @@ export async function sourceNews(rows, existingNotes, results, cacheDir, now = D
     archive.editionWindow = current;
     archive.count = 0;
   }
-  const recent = rows.filter(row => validSource(row) && !ignored.test(row[2]) &&
+  const recent = rows.filter(row => publisherUrl(row[7]?.url, row[7]?.source) && !ignored.test(row[2]) &&
     Date.parse(row[1]) <= now && Date.parse(row[1]) >= now - 48 * hour);
   const articles = recent.filter(row => row[7].source === 'F1');
   const supported = results.items.filter(row => results.notes[row[0]]?.classification)
     .sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
   const media = recent.filter(row => row[7].source !== 'F1');
+  const fetches = new Map();
+  function evidence(row) {
+    const url = row[7].url;
+    if (!fetches.has(url)) fetches.set(url, readSource(row).catch(() => null));
+    return fetches.get(url);
+  }
+  let newOriginals = 0;
+  let newOfficial = 0;
   for (const article of articles) {
     const [, stamp, , , , , , info] = article;
     const url = new URL(info.url);
@@ -101,27 +118,34 @@ export async function sourceNews(rows, existingNotes, results, cacheDir, now = D
     });
     // An official results story becomes a normal article only when the winner and session match the classification.
     if (!existingNotes[id]?.fullTextZh?.length && archive.articles[id]?.item[1] !== stamp) {
-      const primary = await readSource(article).catch(() => null);
-      if (primary && words(primary.body).has(family)) archive.articles[id] = siteReport(id, 'F1 官方来源', [primary]);
+      const primary = await evidence(article);
+      if (primary && words(primary.body).has(family)) {
+        archive.articles[id] = siteReport(id, 'F1 官方来源', [primary]);
+        newOfficial++;
+      }
     }
     const originalId = 'original-' + id;
     if (archive.count >= originalLimit || archive.articles[originalId]) continue;
     const relatedMedia = media.filter(row => topic[code].test(row[2]) &&
       words(row[2]).has(family) && Math.abs(Date.parse(row[1]) - Date.parse(stamp)) < 6 * hour);
-    const byPublisher = ['Sky Sports', 'Motorsport.com'].map(name => relatedMedia.find(row => row[7].source === name));
-    if (byPublisher.some(row => !row)) continue;
-    const refs = await Promise.all(byPublisher.map(row => readSource(row).catch(() => null)));
-    if (refs.some(ref => !ref || !words(ref.body).has(family) || !topic[code].test(ref.body))) continue;
+    const refs = await Promise.all(['Sky Sports', 'Motorsport.com'].map(async name => {
+      for (const row of relatedMedia.filter(candidate => candidate[7].source === name)) {
+        const ref = await evidence(row);
+        if (ref && words(ref.body).has(family) && topic[code].test(ref.body)) return ref;
+      }
+    }));
+    if (refs.some(ref => !ref)) continue;
     const original = siteReport(originalId, 'F1 发车线', refs);
     // Link the reporting to the two matched outlets while keeping the article based on the official classification.
     original.note.fullTextZh = [`Sky Sports 与 Motorsport.com 均报道了这场比赛的成绩。本文以 F1 公布的成绩表核对名次、用时和圈数。`, ...original.note.fullTextZh];
     original.note.fullTextEn = ['Sky Sports and Motorsport.com both covered the session. The positions, times and lap counts in this report were checked against the Formula 1 classification.', ...original.note.fullTextEn];
     archive.articles[originalId] = original;
     archive.count++;
+    newOriginals++;
   }
   await writeFile(file + '.tmp', JSON.stringify(archive) + '\n');
   await rename(file + '.tmp', file);
   const entries = Object.values(archive.articles);
-  console.log(`Source newsroom: ${entries.filter(entry => entry.item[0].startsWith('original-')).length} original reports and ${entries.filter(entry => !entry.item[0].startsWith('original-')).length} F1 reports available.`);
+  console.log(`Source newsroom: ${newOriginals} new originals and ${newOfficial} new or revised F1 reports, ${entries.length} archived.`);
   return { items: entries.map(entry => entry.item), notes: Object.fromEntries(entries.map(entry => [entry.item[0], entry.note])) };
 }

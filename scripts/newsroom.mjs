@@ -368,12 +368,12 @@ export async function writeReports(site, media, now = Date.now()) {
     if (!Number.isFinite(end)) continue;
     const starts = Object.entries(race.sessions).filter(([kind, stamp]) => sessionNames[kind] && Number.isFinite(Date.parse(stamp)))
       .sort(([, a], [, b]) => Date.parse(a) - Date.parse(b));
-    if (end >= now && end - now < 9 * 86400_000 && starts.length) {
+    const previewDate = Date.parse(starts[0]?.[1]) - 3 * 86400_000;
+    if (previewDate <= now && end >= now && end - now < 9 * 86400_000) {
       const opener = starts[0][1];
       const zhTimes = starts.map(([k, stamp]) => `${sessionNames[k][0]} ${time(stamp, false)}`).join('、');
       const enTimes = starts.map(([k, stamp]) => `${sessionNames[k][1]} at ${time(stamp, true)}`).join('; ');
-      const raceDate = Math.min(Date.parse(opener) - 3 * 86400_000, now);
-      add('preview-' + key, raceDate, [zh + '周末前瞻', en + ' weekend preview'], [
+      add('preview-' + key, previewDate, [zh + '周末前瞻', en + ' weekend preview'], [
         `F1 将于北京时间 ${time(opener, false)} 开启${zh}周末，正赛定于 ${time(end, false)} 发车。正赛安排 ${race.laps} 圈，单圈长度为 ${race.length}。`,
         `赛程按北京时间排列：${zhTimes}。`,
         starts.some(([kind]) => kind === 'sprint') ? '本站设有冲刺赛。冲刺排位赛决定冲刺赛的发车顺序，正赛另有排位赛。' :
