@@ -246,7 +246,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   await mkdir(cacheDir, { recursive: true });
   const window = Math.floor(Date.now() / (3 * 3600_000));
   const saved = await json(join(cacheDir, 'edition.json'), {});
-  const edition = saved.version === 2 && saved.window === newsWindow() ? saved : null;
+  const edition = saved.version === 3 && saved.window === newsWindow() ? saved : null;
   const douyinPath = join(cacheDir, 'douyin-public.json');
   const previous = await json(douyinPath, { items: [] });
   const refreshVideos = previous.window !== window;

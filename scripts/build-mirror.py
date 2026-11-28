@@ -61,7 +61,7 @@ with ThreadPoolExecutor(max_workers=4) as pool:
     apis = [f'standings/{year}/{kind}' for year in range(2023, 2027) for kind in ('drivers', 'team')]
     try:
         edition = json.loads(Path('.live-cache/edition.json').read_text(encoding='utf-8'))
-        refresh_edition = (edition.get('version') != 2 or
+        refresh_edition = (edition.get('version') != 3 or
                            int(datetime.now(timezone.utc).timestamp() // 3600) != edition['window'])
     except (OSError, ValueError, TypeError, KeyError):
         refresh_edition = True
