@@ -19,7 +19,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 34
     steps:
       - uses: actions/checkout@v6
         with:
@@ -33,10 +33,14 @@ jobs:
           path: .live-cache
           key: f1-live-v1-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: f1-live-v1-
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/f1-news-model
+          key: f1-source-news-qwen3-4b-2507-llama-b6800
       - name: Prepare the public site and data snapshots
         run: python3 scripts/build-mirror.py
       - name: Add the live centre and refresh news and video
-        run: node scripts/build-live.mjs
+        run: bash scripts/build-with-news-model.sh
       - name: Check the mobile cover once per session
         id: mobile_photo
         continue-on-error: true

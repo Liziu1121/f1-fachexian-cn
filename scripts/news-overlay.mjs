@@ -28,7 +28,6 @@ export function patchNews(js, replace) {
     '  function mergeNewsFeed(feed) {',
     '    const changed=new Set(), waiting=[];',
     '    if (!Array.isArray(feed?.items)) return {changed,waiting};',
-    '    newsExtras.feed.officialUpdates=feed.officialUpdates||[];',
     '    const leadChanged=officialNewsLeadId!==feed.leadId;',
     '    officialNewsLeadId=feed.leadId;',
     '    for (const [id,stamp,titleEn,summaryEn,kind,image,zh,info] of feed.items) {',
@@ -41,8 +40,12 @@ export function patchNews(js, replace) {
     '        changed.add(id);',
     '      }',
     '      if (info?.source) article.source=info.source;',
-    '      if (id.startsWith("analysis-races-") && newsExtras.notes[id] && !article.loadedHourlyBody) {',
-    '        article.loadedHourlyBody=true;',
+    '      if (info?.generated && newsExtras.notes[id] && article.generatedStamp!==stamp) {',
+    '        article.generatedStamp=stamp;',
+    '        article.stamp=stamp;',
+    '        article.titleEn=titleEn;',
+    '        article.summaryEn="";',
+    '        article.kind=kind;',
     '        changed.add(id);',
     '      }',
     '      if (info?.dateOnly) article.dateOnly=true;',
@@ -77,13 +80,12 @@ export function patchNews(js, replace) {
     '    nextNewsFetch=Date.now()+300000;',
     '    const feed=await api("news/latest",14000);',
     '    if (!Array.isArray(feed?.items)) { nextNewsFetch=Date.now()+60000; return; }',
-    '    if (feed.items.some(row=>row[0]?.startsWith("analysis-races-")&&!newsExtras.notes[row[0]])) {',
-    '      const hourly=await api("news/hourly",14000);',
-    '      if (hourly && !hourly.error) Object.assign(newsExtras.notes,hourly);',
+    '    if (feed.items.some(row=>row[7]?.generated&&newsById.get(row[0])?.generatedStamp!==row[1])) {',
+    '      const generated=await api("news/generated",14000);',
+    '      if (generated && !generated.error) Object.assign(newsExtras.notes,generated);',
     '      else nextNewsFetch=Date.now()+60000;',
     '    }',
     '    const {changed,waiting,leadChanged}=mergeNewsFeed(feed);',
-    '    if (currentPage==="news") drawOfficialNewsUpdates();',
     '    if (changed.size) {',
     '      updateNewsMonths();',
     '      redrawChangedNews(changed);',
@@ -101,7 +103,7 @@ export function patchNews(js, replace) {
     'isChineseNewsText(article.title)?article.title:translateNewsInBrowser(article.titleEn),\n'+
     '        same||isChineseNewsText(article.summary)||!article.summaryEn?"":translateNewsInBrowser(article.summaryEn)');
   edit('signal:AbortSignal.timeout(timeout),headers:{Accept:"application/json"}',
-    'signal:AbortSignal.timeout(timeout),cache:path==="news/latest"?"no-cache":"default",headers:{Accept:"application/json"}');
+    'signal:AbortSignal.timeout(timeout),cache:path.startsWith("news/")?"no-cache":"default",headers:{Accept:"application/json"}');
   edit('function newsSpotlight(now=Date.now(),en=window.F1_LOCALE.english())', 'function newsSpotlight(now=Date.now())');
   edit('season tickets?|betting|bets|F1 Academy', 'season tickets?|betting|bet builder|bets|F1 Academy');
   edit('item.image&&Date.parse(item.stamp)<=now+300000&&\n        (en||isChineseNewsText(item.title))&&!promoOrOtherSeries.test',
@@ -194,26 +196,10 @@ export function patchNews(js, replace) {
   js = js.slice(0, archiveBodyStart) + js.slice(archiveBodyStart, archiveBodyEnd)
     .replaceAll('newsArchive.length', 'readable.length') + js.slice(archiveBodyEnd);
   edit('["#newsSearch","input"],["#newsBodyOnly","change"]', '["#newsSearch","input"]');
-  edit('  function drawNews(id) {', `  function drawOfficialNewsUpdates() {
-    const updates=newsExtras.feed.officialUpdates||[];
-    qs("#officialNewsUpdates").hidden=!updates.length;
-    const en=window.F1_LOCALE.english();
-    qs("#officialNewsUpdatesTitle").textContent=en?"Latest from Formula 1":"F1 官方最新动态";
-    qs("#officialNewsUpdatesList").innerHTML=updates.map(item=>{
-      const title=!en&&item.titleZh?item.titleZh:item.title;
-      const article=newsById.get(item.id);
-      return "<li>"+(article&&hasNewsBody(article,en)?
-        '<button class="text-link" type="button" data-news-entry="'+safe(item.id)+'">'+safe(title)+'</button>':
-        safe(title))+"</li>";
-    }).join("");
-  }
-
-  function drawNews(id) {`);
   const detailStart = js.indexOf('    if(article){', js.indexOf('  function drawNews(id)'));
   const detailEnd = js.indexOf('    qs("#newsSpotlight").innerHTML=', detailStart);
   if (detailStart < 0 || detailEnd < 0) throw new Error('News detail integration point unavailable');
-  js = js.slice(0, detailStart) + `    drawOfficialNewsUpdates();
-    if(article){
+  js = js.slice(0, detailStart) + `    if(article){
       const en=window.F1_LOCALE.english();
       const {title}=newsText(article,en);
       const body=newsBody(article,en);

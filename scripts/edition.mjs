@@ -114,7 +114,7 @@ export async function refreshEdition({ feed, cacheDir }) {
   const previous = await read(path, { items: [], videos: [] });
   const now = Date.now();
   const window = newsWindow(now);
-  if (previous.version === 3 && previous.window === window) return previous;
+  if (previous.version === 4 && previous.window === window) return previous;
   const [external, reports] = await Promise.all([
     publisherHeadlines(), officialReports().catch(error => {
       console.warn(`F1 headlines: ${error.message}`);
@@ -135,13 +135,7 @@ export async function refreshEdition({ feed, cacheDir }) {
     const sources = new Set(recent.filter(other => other.source !== source && similar(title, other.terms)).map(other => other.source));
     return { id: row[0], score: sources.size * 12 - (now - Date.parse(row[1])) / hours + (row[5] ? 1 : 0) };
   }).sort((a, b) => b.score - a.score)[0]?.id;
-  const known = new Map(previous.items.map(row => [row[0], row]));
-  const fresh = items.filter(row => row[7]?.source === 'F1' &&
-    (known.get(row[0])?.[1] !== row[1] || known.get(row[0])?.[2] !== row[2]));
-  const displayed = fresh.length ? fresh : items.filter(row =>
-    row[7]?.source === 'F1' && Date.parse(row[1]) >= now - 24 * hours);
-  const officialUpdates = displayed.map(([id, stamp, title, , , , zh]) => ({ id, stamp, title, titleZh: zh?.title }));
-  const edition = { version: 3, items, leadId: lead, checked: now, window, officialUpdates };
+  const edition = { version: 4, items, leadId: lead, checked: now, window };
   await write(path, edition);
   return edition;
 }

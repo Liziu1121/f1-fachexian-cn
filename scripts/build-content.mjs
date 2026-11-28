@@ -5,10 +5,11 @@ import { circuitMedia, newsWindow, refreshEdition } from './edition.mjs';
 import { circuitPhotoSelection, patchHeroMarkup, patchHeroPhoto } from './home-photo.mjs';
 import { biliAccount, biliId, latestBilibili } from './bilibili-feed.mjs';
 import { recentDouyin } from './douyin-feed.mjs';
-import { hourlyReports, writeReports } from './newsroom.mjs';
+import { writeReports } from './newsroom.mjs';
 import { patchNews } from './news-overlay.mjs';
 import { editorialPhotos, newsImages, newsPhotoCatalog } from './news-images.mjs';
 import { sourceReports } from './source-reports.mjs';
+import { sourceNews } from './source-news.mjs';
 
 const han = value => typeof value === 'string' && /\p{Script=Han}/u.test(value);
 const json = async (path, fallback) => {
@@ -49,7 +50,7 @@ async function buildNews(site, cacheDir, notes, edition) {
     feed = await refreshEdition({ feed: { items }, cacheDir });
   }
   await mkdir(join(site, 'api', 'news'), { recursive: true });
-  const news = { items: feed.items, leadId: feed.leadId, checked: feed.checked, window: feed.window, officialUpdates: feed.officialUpdates };
+  const news = { items: feed.items, leadId: feed.leadId, checked: feed.checked, window: feed.window };
   await writeJson(target, news);
   return news;
 }
@@ -201,10 +202,6 @@ function patchIndex(index, replace) {
     '      <p class="sub" id="videoDouyinCoverage">抖音官号最新清单暂未公开，现显示已核对的归档视频。</p>',
     '      <p id="videoCount" class="sub" role="status"></p>',
   ].join('\n'));
-  index = replace(index, '      <div id="newsSpotlight" class="news-grid"></div>',
-    '      <div id="newsSpotlight" class="news-grid"></div>\n' +
-    '      <section class="news-archive" id="officialNewsUpdates" hidden><h2 id="officialNewsUpdatesTitle"></h2>' +
-    '<ul id="officialNewsUpdatesList"></ul></section>');
   return replace(index, '          <button class="action" type="button" id="videoSwitch" hidden></button>\n', '');
 }
 
@@ -246,7 +243,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   await mkdir(cacheDir, { recursive: true });
   const window = Math.floor(Date.now() / (3 * 3600_000));
   const saved = await json(join(cacheDir, 'edition.json'), {});
-  const edition = saved.version === 3 && saved.window === newsWindow() ? saved : null;
+  const edition = saved.version === 4 && saved.window === newsWindow() ? saved : null;
   const douyinPath = join(cacheDir, 'douyin-public.json');
   const previous = await json(douyinPath, { items: [] });
   const refreshVideos = previous.window !== window;
@@ -268,9 +265,12 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
   const [externalNews, editorial, sourced, photoCatalog] = await Promise.all([
     buildNews(site, cacheDir, notes, edition), writeReports(site, media), sourceReports(root, cacheDir, media), newsPhotoCatalog(site),
   ]);
-  const hourly = await hourlyReports(editorial, cacheDir, newsWindow());
-  Object.assign(notes, editorial.notes, licensed.notes, sourced.notes, hourly.notes);
-  const originalItems = [...hourly.items, ...editorial.items, ...licensed.items, ...sourced.items, ...externalNews.items].map(row => {
+  Object.assign(notes, editorial.notes, licensed.notes, sourced.notes);
+  const desk = await sourceNews(externalNews.items, notes, cacheDir);
+  Object.assign(notes, desk.notes);
+  const merged = new Map([...externalNews.items, ...editorial.items, ...licensed.items, ...sourced.items, ...desk.items]
+    .map(row => [row[0], row]));
+  const originalItems = [...merged.values()].map(row => {
     const note = notes[row[0]];
     const onSite = Boolean((note?.fullTextZh?.length || note?.body?.length) &&
       (note?.fullTextEn?.length || note?.bodyEn?.length));
@@ -281,7 +281,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
     leadId: originalItems.find(row => row[7].onSite)?.[0] };
   const newsStoryPhotos = Object.fromEntries(photoEvidence.flatMap(photo => (photo.stories || [])
     .map(id => [id, { image: photo.url, photoCaption: { zh: photo.captionZh, en: photo.captionEn } }])));
-  await writeJson(join(site, 'api', 'news', 'hourly.json'), hourly.notes);
+  await writeJson(join(site, 'api', 'news', 'generated.json'), desk.notes);
   await writeJson(join(site, 'api', 'news', 'latest.json'), feed);
   await mkdir(join(site, 'api', 'videos'), { recursive: true });
   await writeJson(join(site, 'api', 'videos', 'mainland.json'), { ...videos, douyin: douyin.items, douyinStatus });
