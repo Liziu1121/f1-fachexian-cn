@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const names = {
@@ -478,4 +478,77 @@ export async function writeReports(site, media, now = Date.now()) {
     }
   }
   return { items, notes };
+}
+
+function comparisonCopy(earlier, later, from, to, en) {
+  const name = to[2];
+  const moved = Number(from[0]) - Number(to[0]);
+  const points = Number(to[6]) - Number(from[6]);
+  const positions = moved === 0 ? local(en, '两站的完赛名次相同。', 'The finishing position was the same at both rounds.')
+    : local(en, `第二站的完赛名次比第一站${moved > 0 ? '高' : '低'} ${Math.abs(moved)} 位。`,
+      `The second finishing position was ${Math.abs(moved)} place(s) ${moved > 0 ? 'higher' : 'lower'}.`);
+  const change = points === 0 ? local(en, '两场正赛的积分没有变化。', 'The two races yielded the same number of points.')
+    : local(en, `两场正赛相差 ${Math.abs(points)} 分，${points > 0 ? later : earlier}的正赛积分更多。`,
+      `The difference was ${Math.abs(points)} point(s), with the higher return at the ${points > 0 ? later : earlier}.`);
+  return [
+    local(en, `${name}在${earlier}正赛排名第 ${from[0]}，在${later}正赛排名第 ${to[0]}。${positions}`,
+      `${name} finished P${from[0]} in the ${earlier} and P${to[0]} in the ${later}. ${positions}`),
+    local(en, `两站的成绩表分别记录了 ${from[4]} 圈和 ${to[4]} 圈。赛道长度和规定圈数各不相同，完赛圈数须结合各站成绩表阅读。`,
+      `The classifications list ${from[4]} laps in the first race and ${to[4]} in the second. Lap totals have to be read against the distance of each Grand Prix.`),
+    local(en, `${name}在两场正赛分别取得 ${from[6]} 分和 ${to[6]} 分。${change}`,
+      `${name} earned ${from[6]} and ${to[6]} points, respectively. ${change}`),
+    local(en, `两场正赛合计 ${Number(from[6]) + Number(to[6])} 分。统计口径为这两场正赛的官方成绩。`,
+      `The two Grand Prix results account for ${Number(from[6]) + Number(to[6])} points in total, based on their published race classifications.`),
+  ];
+}
+
+export async function hourlyReports(reports, cacheDir, window) {
+  const path = join(cacheDir, 'hourly-reports.json');
+  const archive = await readFile(path, 'utf8').then(JSON.parse, error => {
+    if (error.code === 'ENOENT') return { articles: {} };
+    throw error;
+  });
+  if (archive.window !== window) {
+    const rounds = reports.items.filter(row => row[4] === '分站赛报' && reports.notes[row[0]]?.classification)
+      .sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).map(row => {
+        const round = row[7].round;
+        const classification = reports.notes[row[0]].classification;
+        const en = (englishNames[round] || round.replace(/(^|-)([a-z])/g, (_, space, first) =>
+          (space ? ' ' : '') + first.toUpperCase())) + ' Grand Prix';
+        return { round, year: new Date(row[1]).getUTCFullYear(), zh: names[round] + '大奖赛', en, photo: row[5], classification };
+      });
+    const edition = new Set();
+    for (let i = 0; i < rounds.length && edition.size < 10; i++) {
+      const newest = rounds[i];
+      const afterEn = new Map(newest.classification.en.rows.map(row => [row[1], row]));
+      for (const previous of rounds.slice(i + 1)) {
+        const beforeEn = new Map(previous.classification.en.rows.map(row => [row[1], row]));
+        const beforeZh = new Map(previous.classification.zh.rows.map(row => [row[1], row]));
+        for (const after of newest.classification.zh.rows) {
+          const number = after[1];
+          const id = `analysis-races-${newest.year}-${previous.round}-${newest.round}-${number}`;
+          const before = beforeZh.get(number);
+          if (edition.has(number) || archive.articles[id] || ![before, after].every(row =>
+            row && [row[0], row[4], row[6]].every(value => /^\d+$/.test(value)))) continue;
+          const title = `${after[2]}正赛对比 · ${previous.zh}与${newest.zh}`;
+          const titleEn = `${afterEn.get(number)[2]} in two races: ${previous.en} and ${newest.en}`;
+          archive.articles[id] = {
+            item: [id, new Date(window * 3600_000).toISOString(), titleEn, '', '正赛数据对比', newest.photo,
+              { title }, { source: 'F1 发车线', round: newest.round }],
+            note: { title, fullTextZh: comparisonCopy(previous.zh, newest.zh, before, after, false),
+              fullTextEn: comparisonCopy(previous.en, newest.en, beforeEn.get(number), afterEn.get(number), true),
+              sources: [`F1 官方正赛成绩 · ${previous.zh}`, `F1 官方正赛成绩 · ${newest.zh}`] },
+          };
+          edition.add(number);
+          if (edition.size === 10) break;
+        }
+        if (edition.size === 10) break;
+      }
+    }
+    archive.window = window;
+    await writeFile(path, JSON.stringify(archive) + '\n');
+    console.log(`Hourly newsroom: ${edition.size} new bilingual race analyses.`);
+  }
+  return { items: Object.values(archive.articles).map(article => article.item),
+    notes: Object.fromEntries(Object.entries(archive.articles).map(([id, article]) => [id, article.note])) };
 }

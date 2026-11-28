@@ -107,12 +107,14 @@ function similar(first, second) {
   return shared >= 3 && shared / Math.min(first.size, second.size) >= .55;
 }
 
+export const newsWindow = (now = Date.now()) => Math.floor(now / hours);
+
 export async function refreshEdition({ feed, cacheDir }) {
   const path = join(cacheDir, 'edition.json');
   const previous = await read(path, { items: [], videos: [] });
   const now = Date.now();
-  const window = Math.floor(now / (3 * hours));
-  if (previous.window === window) return previous;
+  const window = newsWindow(now);
+  if (previous.version === 2 && previous.window === window) return previous;
   const [external, reports] = await Promise.all([
     publisherHeadlines(), officialReports().catch(error => {
       console.warn(`F1 headlines: ${error.message}`);
@@ -123,14 +125,22 @@ export async function refreshEdition({ feed, cacheDir }) {
     'source-' + createHash('sha256').update(item.url).digest('hex').slice(0, 20),
     new Date(item.date).toISOString(), item.title, '', item.source, image(item.image), {}, { url: item.url, source: item.source },
   ]);
-  const pool = new Map([...previous.items, ...articles, ...reports, ...feed.items].map(row => [row[0], row]));
-  const items = [...pool.values()].sort((a, b) => Date.parse(b[1]) - Date.parse(a[1])).slice(0, 360);
+  const pool = new Map([...previous.items, ...articles, ...feed.items, ...reports].map(row => [row[0], row]));
+  const ordered = [...pool.values()].sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
+  const items = [...ordered.filter(row => row[7]?.source === 'F1'),
+    ...ordered.filter(row => row[7]?.source !== 'F1').slice(0, 360)]
+    .sort((a, b) => Date.parse(b[1]) - Date.parse(a[1]));
   const recent = items.filter(row => Date.parse(row[1]) >= now - 72 * hours).map(row => ({ row, terms: terms(row[2]), source: row[7]?.source || 'F1' }));
   const lead = recent.map(({ row, terms: title, source }) => {
     const sources = new Set(recent.filter(other => other.source !== source && similar(title, other.terms)).map(other => other.source));
     return { id: row[0], score: sources.size * 12 - (now - Date.parse(row[1])) / hours + (row[5] ? 1 : 0) };
   }).sort((a, b) => b.score - a.score)[0]?.id;
-  const edition = { items, leadId: lead, checked: now, window };
+  const known = new Map(previous.items.map(row => [row[0], row]));
+  const fresh = items.filter(row => row[7]?.source === 'F1' &&
+    (known.get(row[0])?.[1] !== row[1] || known.get(row[0])?.[2] !== row[2]));
+  const officialUpdates = fresh.length ? fresh.map(([id, stamp, title, , , , zh]) =>
+    ({ id, stamp, title, titleZh: zh?.title })) : previous.officialUpdates || [];
+  const edition = { version: 2, items, leadId: lead, checked: now, window, officialUpdates };
   await write(path, edition);
   return edition;
 }

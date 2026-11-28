@@ -37,6 +37,26 @@ jobs:
         run: python3 scripts/build-mirror.py
       - name: Add the live centre and refresh news and video
         run: node scripts/build-live.mjs
+      - name: Check the mobile cover once per session
+        id: mobile_photo
+        continue-on-error: true
+        run: |
+          pending="$(node scripts/check-home-photo.mjs --pending)"
+          if [ "$pending" = true ]; then
+            npm install --prefix "$RUNNER_TEMP/f1-photo" --no-save playwright@1.62.1
+            export F1_PLAYWRIGHT="$RUNNER_TEMP/f1-photo/node_modules/playwright"
+            export F1_CHROME="$(command -v google-chrome || true)"
+            if [ -z "$F1_CHROME" ]; then
+              "$RUNNER_TEMP/f1-photo/node_modules/.bin/playwright" install --with-deps chromium
+            fi
+            node scripts/check-home-photo.mjs
+          fi
+      - uses: actions/upload-artifact@v4
+        if: steps.mobile_photo.outcome == 'failure'
+        with:
+          name: home-photo-diagnostics
+          path: home-photo-*.png
+          if-no-files-found: ignore
       - uses: actions/upload-pages-artifact@v5
         with:
           path: public
