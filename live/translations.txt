@@ -166,3 +166,8 @@ Turn One 赛道和车手数据|Turn One circuit and driver data
 Turn One 赛道数据|Turn One circuit data
 赛前准备|Pre-session
 赛后回顾|Post-session
+赛中计时和赛会消息来自 TELOS。车手位置按小段计时估算，圈速、轮胎、天气及已发布电台的赛后快照来自 OpenF1。|TELOS provides live timing and race control. Car positions are estimated from mini-sector timing. OpenF1 supplies post-session lap, tyre, weather and published radio data.
+位置按小段计时估算|Positions estimated from mini-sector timing
+等待本场车手位置|Waiting for driver positions
+位置数据暂未更新|Position updates paused
+等待本场计时数据|Waiting for current-session timing

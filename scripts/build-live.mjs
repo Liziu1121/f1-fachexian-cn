@@ -43,7 +43,7 @@ async function installDashboard() {
   addAfter('  <link rel="stylesheet" href="./live.css">', '\n  <link rel="stylesheet" href="./circuit-sectors.css">');
   addAfter('  <link rel="stylesheet" href="./circuit-sectors.css">', '\n  <link rel="stylesheet" href="./home.css">');
   addBefore('  <script defer src="./app.js"></script>',
-    '  <script defer src="./circuit-sectors.js"></script>\n  <script defer src="./live.js"></script>\n  <script defer src="./regulations.js"></script>\n');
+    '  <script defer src="./circuit-sectors.js"></script>\n  <script defer src="./positions.js"></script>\n  <script defer src="./live.js"></script>\n  <script defer src="./regulations.js"></script>\n');
   addBefore('      <a href="#/weekend" data-nav="weekend" class="nav-weekend">',
     '      <a href="#/live" data-nav="live" class="nav-live">比赛实况</a>\n');
   addAfter('        <a class="menu-group-title" href="#/trackside" data-nav="trackside">赛道上</a>',
@@ -79,7 +79,7 @@ async function installDashboard() {
 
   await Promise.all([
     ...[['index.html', html], ['app.js', routes], ['locale.js', labels]].map(([file, content]) => writeFile(join(site, file), content)),
-    ...['live.js', 'regulations.js', 'live.css', 'circuit-sectors.js', 'circuit-sectors.css'].map(file => copyFile(join(sources, file), join(site, file))),
+    ...['positions.js', 'live.js', 'regulations.js', 'live.css', 'circuit-sectors.js', 'circuit-sectors.css'].map(file => copyFile(join(sources, file), join(site, file))),
     copyFile(join(root, 'home', 'hero.css'), join(site, 'home.css')),
   ]);
 }
@@ -96,7 +96,7 @@ async function previousSnapshot() {
 async function versionAssets() {
   const index = join(site, 'index.html');
   let page = await readText(index);
-  for (const file of ['live.css', 'circuit-sectors.css', 'home.css', 'content-data.js', 'circuit-sectors.js', 'live.js', 'regulations.js', 'locale.js', 'video.js', 'app.js']) {
+  for (const file of ['live.css', 'circuit-sectors.css', 'home.css', 'content-data.js', 'circuit-sectors.js', 'positions.js', 'live.js', 'regulations.js', 'locale.js', 'video.js', 'app.js']) {
     const content = await readFile(join(site, file));
     if (file.endsWith('.js')) new Script(content.toString('utf8'), { filename: file });
     const hash = createHash('sha256').update(content).digest('hex').slice(0, 12);

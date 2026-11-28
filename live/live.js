@@ -14,19 +14,14 @@
   const fullscreen = byId('liveFullscreen');
   const audio = byId('liveAudio');
   const refreshButton = byId('liveRefresh');
-  const timingFrame = byId('liveTimingFrame');
-  const statusFrame = byId('liveStatusFrame');
-  const mapFrame = byId('liveMapFrame');
-  const driverFrame = byId('liveDriverFrame');
-  const controlFrame = byId('liveControlFrame');
-  const circuitCanvas = byId('liveCircuit');
-  const mapSourceSize = 420;
-  new ResizeObserver(([entry]) => {
-    if (entry.contentRect.width) mapFrame.style.zoom = String(Math.min(entry.contentRect.width, 330) / mapSourceSize);
-  }).observe(byId('liveMapWindow'));
-  new ResizeObserver(([entry]) => {
-    if (entry.contentRect.width) driverFrame.style.zoom = String(Math.min(entry.contentRect.width, 330) / 360);
-  }).observe(byId('liveDriverWindow'));
+  const liveGrid = raceData.querySelector('.live-grid');
+  const circuitMap = window.F1_LIVE_POSITIONS.painter(byId('liveCircuit'));
+  const followFeed = window.F1_LIVE_POSITIONS.follow((packet, layout, unavailable = false) => {
+    livePacket = packet;
+    liveLayout = layout;
+    liveUnavailable = unavailable;
+    draw();
+  });
   const content = window.F1_CONTENT;
   const html = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
   const officialHosts = new Set(['livetiming.formula1.com', 'www.formula1.com', 'www.skysports.com', 'www.motorsport.com', 'www.autosport.com', 'www.fia.com', 'f1archive.org']);
@@ -51,7 +46,9 @@
   let snapshot;
   let recording;
   let driverFocus;
-  let circuit;
+  let liveSession, livePacket, liveLayout, liveUnavailable;
+  let paintedLayout, paintedPacket;
+  let currentDetails;
   let timelineFilter = 'all';
   let galleryCourse, galleryIndex = 0, galleryTimer, countdownTimer;
   let photoRequest, photoTransition, activePhoto = 0;
@@ -59,7 +56,6 @@
   let showRecent = false;
   const language = (zh, en) => english() ? en : zh;
   const compounds = { SOFT: ['S', '软胎'], MEDIUM: ['M', '中性胎'], HARD: ['H', '硬胎'], INTERMEDIATE: ['I', '半雨胎'], WET: ['W', '全雨胎'] };
-  new ResizeObserver(paintCircuit).observe(circuitCanvas);
 
   function setMarkup(id, value) {
     const node = byId(id);
@@ -133,6 +129,7 @@
   }
 
   function tyreAge(stint) {
+    if (Number.isInteger(stint?.age) && stint.age >= 0) return stint.age;
     if (![stint?.ageAtStart, stint?.start, stint?.end].every(Number.isInteger) || stint.end < stint.start) return '—';
     return stint.ageAtStart + stint.end - stint.start + 1;
   }
@@ -282,17 +279,19 @@
   }
 
   function split(sector) {
-    if (!Number.isFinite(sector?.time) || sector.time <= 0) return '<td class="live-split">—</td>';
-    const segments = (sector.segments ?? []).map(value =>
+    const time = Number.isFinite(sector?.time) && sector.time > 0 ? sector.time.toFixed(3) : '—';
+    const segments = (sector?.segments ?? []).map(value =>
       `<i data-segment="${Number.isInteger(value) ? value : 0}"></i>`).join('');
-    return `<td class="live-split"><strong>${sector.time.toFixed(3)}</strong>${segments ? `<span class="live-mini" aria-hidden="true">${segments}</span>` : ''}</td>`;
+    return `<td class="live-split"><strong>${time}</strong>${segments ? `<span class="live-mini" aria-hidden="true">${segments}</span>` : ''}</td>`;
   }
 
   function drawTiming(details, mode) {
     byId('liveSectorKey').hidden = !details?.rows.some(row => row.measuredLap?.sectors.some(sector => sector.segments.some(Boolean)));
-    setText('liveTimingCaption', details?.rows.length ? '所列分段取自最快计时圈' : mode === 'live' || mode === 'settling' ? '实时计时与分段' : '');
+    const inProgress = mode === 'live' || mode === 'settling';
+    setText('liveTimingCaption', details?.rows.length ? inProgress ? '实时计时与分段' : '所列分段取自最快计时圈' : '');
     if (!details?.rows.length) {
-      const status = mode === 'recent' ? '最近场次的计时快照正在同步。' : '暂无计时数据';
+      const status = mode === 'recent' ? '最近场次的计时快照正在同步。'
+        : inProgress ? liveUnavailable ? '计时源暂不可用' : '等待本场计时数据' : '暂无计时数据';
       return setMarkup('liveTiming', empty(status));
     }
     const race = details.session.type === 'Race';
@@ -311,24 +310,25 @@
         `<td${row === fastest ? ' class="live-fastest"' : ''}>${lapTime(row.best)}</td>${sectors}` +
         `<td>${tyre(stint)}${stint && age !== '—' ? ` ${age}` : ''}</td><td>${html(row.pitCount ?? '—')}</td><td>${html(row.laps ?? '—')}</td></tr>`;
     }).join('');
+    const focused = byId('liveTiming').contains(document.activeElement) ? document.activeElement.dataset.liveDriver : null;
     setMarkup('liveTiming', `<table class="live-table"><thead><tr><th scope="col">排名</th><th scope="col">车手</th>` +
       `<th scope="col">领先差</th>${race ? '<th scope="col">距前车</th>' : ''}<th scope="col">上一圈</th><th scope="col">最快圈</th>` +
       `<th scope="col">S1</th><th scope="col">S2</th><th scope="col">S3</th><th scope="col">轮胎</th><th scope="col">进站</th><th scope="col">圈数</th></tr></thead><tbody>${rows}</tbody></table>`);
+    if (/^\d+$/.test(focused ?? '') && document.activeElement === document.body) {
+      byId('liveTiming').querySelector(`[data-live-driver="${focused}"]`)?.focus({ preventScroll: true });
+    }
   }
 
-  function drawDriver(details, isLive) {
-    byId('liveDriverWindow').hidden = !isLive;
-    byId('liveDriverDetail').hidden = isLive;
-    showFrame(driverFrame, isLive);
+  function drawDriver(details) {
     const row = details?.rows.find(entry => entry.driver.number === driverFocus);
-    setText('liveDriverCode', isLive ? '领先车手' : row?.driver.code ?? '');
+    setText('liveDriverCode', row?.driver.code ?? '');
     if (!row) return setMarkup('liveDriverDetail', empty('暂无车手分段和策略数据'));
     const { driver } = row;
     const stints = (row.tyreStints ?? []).filter(stint => Number.isInteger(stint.start) && Number.isInteger(stint.end));
     const lap = row.measuredLap;
     const measured = Number.isInteger(lap?.number) ? `L${lap.number}` : '';
     let stats = metric('最快圈', lapTime(row.best)) + metric('最快圈测速点', measurement(lap?.speed, 'km/h'), measured) +
-      metric('轮胎使用圈数', String(tyreAge(stints.at(-1)))) + metric('进站次数', String(row.pitCount ?? '—'));
+      metric('轮胎使用圈数', String(tyreAge(row.tyreStints?.at(-1)))) + metric('进站次数', String(row.pitCount ?? '—'));
     if (Number.isInteger(row.lastPit?.lap)) stats += metric('最近进站', `L${row.lastPit.lap}`);
     if (Number.isFinite(row.lastPit?.stop)) stats += metric('停站用时', measurement(row.lastPit.stop, 's', 2));
     const strategy = stints.map(stint => `<li>${tyre(stint)}<span>L${stint.start}–${stint.end}</span></li>`).join('');
@@ -340,15 +340,12 @@
     const events = (details?.events ?? []).map(item => ({ ...item, kind: 'control' }));
     const clips = (details?.radio ?? []).filter(clip => link(clip.url)).map(item => ({ ...item, kind: 'radio' }));
     const shown = [...events, ...clips].filter(item => timelineFilter === 'all' || item.kind === timelineFilter).sort((a, b) => b.date - a.date);
-    const showPublic = isLive && timelineFilter !== 'radio';
-    showFrame(controlFrame, showPublic);
-    byId('livePublicControl').hidden = !showPublic;
     setText('liveTimelineCount', shown.length ? `${shown.length} 条` : '');
     if (!shown.length) {
-      const radioNotice = isLive ? '本场电台与文字转写的入口见底部备注。'
-        : details && !details.radioAvailable ? '电台数据暂不可用' : '暂无已发布的电台录音';
-      const controlNotice = details && !details.controlAvailable ? '赛会消息暂不可用' : '暂无赛会消息';
-      return setMarkup('liveTimeline', timelineFilter === 'control' && showPublic ? '' : empty(timelineFilter === 'control' ? controlNotice : radioNotice));
+      const radioNotice = details && !details.radioAvailable ? '电台数据暂不可用' : '暂无已发布的电台录音';
+      const controlNotice = (details && !details.controlAvailable) || (isLive && liveUnavailable)
+        ? '赛会消息暂不可用' : '暂无赛会消息';
+      return setMarkup('liveTimeline', empty(timelineFilter === 'radio' ? radioNotice : controlNotice));
     }
     const list = shown.map(item => {
       const radio = item.kind === 'radio';
@@ -384,83 +381,24 @@
       : empty(bulletins?.unavailable ? 'FIA 公告暂不可用' : '暂无本站公告'));
   }
 
-  function showFrame(frame, open) {
-    if (open && !frame.hasAttribute('src')) frame.src = frame.dataset.src;
-    if (!open && frame.hasAttribute('src')) frame.removeAttribute('src');
+  function activeFeed(session) {
+    if (!(session || liveSession) || sameSession(session, liveSession)) return;
+    liveSession = session;
+    livePacket = liveLayout = undefined;
+    liveUnavailable = false;
+    followFeed(session);
   }
 
-  function drawLiveFrames(isLive) {
-    byId('livePublicTiming').hidden = !isLive;
-    byId('liveTiming').hidden = isLive;
-    byId('livePublicStatus').hidden = !isLive;
-    showFrame(timingFrame, isLive);
-    showFrame(statusFrame, isLive);
-  }
-
-  function paintCircuit() {
-    const width = circuitCanvas.clientWidth;
-    const height = circuitCanvas.clientHeight;
-    if (!circuit || !width || !height) return;
-    const scaleFactor = Math.min(window.devicePixelRatio || 1, 2);
-    circuitCanvas.width = Math.round(width * scaleFactor);
-    circuitCanvas.height = Math.round(height * scaleFactor);
-    const context = circuitCanvas.getContext('2d');
-    if (!context) return;
-    context.scale(scaleFactor, scaleFactor);
-    const angle = circuit.rotation * Math.PI / 180;
-    const cos = Math.cos(angle);
-    const sin = Math.sin(angle);
-    const rotate = (x, y) => [x * cos - y * sin, -(x * sin + y * cos)];
-    const points = circuit.x.map((x, i) => rotate(x, circuit.y[i]));
-    const xs = points.map(point => point[0]);
-    const ys = points.map(point => point[1]);
-    const left = Math.min(...xs), right = Math.max(...xs);
-    const top = Math.min(...ys), bottom = Math.max(...ys);
-    const scale = Math.min((width - 46) / Math.max(right - left, 1), (height - 52) / Math.max(bottom - top, 1));
-    const project = ([x, y]) => [(x - (left + right) / 2) * scale + width / 2, (y - (top + bottom) / 2) * scale + height / 2];
-    context.lineCap = 'round';
-    context.lineJoin = 'round';
-    context.beginPath();
-    points.forEach((point, i) => {
-      const [x, y] = project(point);
-      if (i === 0) context.moveTo(x, y);
-      else context.lineTo(x, y);
-    });
-    context.closePath();
-    for (const [lineWidth, color] of [[11, '#25394a'], [6, '#57616b'], [3, '#f3c172']]) {
-      context.lineWidth = lineWidth;
-      context.strokeStyle = color;
-      context.stroke();
-    }
-    context.font = '600 10px ui-monospace, monospace';
-    context.textBaseline = 'middle';
-    context.textAlign = 'center';
-    for (const corner of circuit.corners ?? []) {
-      const [x, y] = project(rotate(corner.x, corner.y));
-      const dx = x - width / 2;
-      const dy = y - height / 2;
-      const length = Math.hypot(dx, dy) || 1;
-      context.beginPath();
-      context.fillStyle = '#a7eee0';
-      context.arc(x, y, 2.3, 0, 2 * Math.PI);
-      context.fill();
-      context.fillStyle = '#d5e3f1';
-      context.fillText(corner.label, x + dx / length * 11, y + dy / length * 11);
-    }
-  }
-
-  function drawMap(showPublic, session, layout) {
-    const showCircuit = !showPublic && Boolean(layout?.x.length);
-    const circuitChanged = circuit !== layout;
-    circuit = layout;
-    byId('liveCircuitFrame').hidden = !showCircuit;
-    if (showCircuit && circuitChanged) paintCircuit();
+  function drawMap(session, layout, isLive) {
+    const hasOutline = Boolean(layout?.x?.length);
     const map = byId('liveTrackLayout');
     const course = sessionCircuit(session)?.[0];
     const code = course && content.circuit[course]?.[3];
-    const url = !showPublic && !showCircuit && code ? `https://media.formula1.com/image/upload/c_fit,h_704/q_auto/v1740000001/common/f1/2026/track/2026track${code}detailed.webp` : '';
-    byId('liveMapWindow').hidden = !showPublic;
-    showFrame(mapFrame, showPublic);
+    const season = new Date(session.startsAt).getUTCFullYear();
+    const url = !hasOutline && code
+      ? `https://media.formula1.com/image/upload/c_fit,h_704/q_auto/common/f1/${season}/track/${season}track${code}detailed.webp` : '';
+    const frame = byId('liveCircuitFrame');
+    frame.hidden = !hasOutline;
     if (url && map.getAttribute('src') !== url) {
       map.hidden = false;
       map.src = url;
@@ -468,13 +406,44 @@
       map.hidden = true;
       map.removeAttribute('src');
     }
-    byId('liveMapStatus').hidden = showPublic || showCircuit || !map.hidden;
-    setText('liveMapCaption', showPublic ? '车位按分段进度估算。' : showCircuit ? '轮廓与弯角' : map.hidden ? '' : '官方赛道布局');
+    const packet = isLive && hasOutline ? livePacket : undefined;
+    if (paintedLayout !== layout || paintedPacket !== packet) {
+      paintedLayout = layout;
+      paintedPacket = packet;
+      circuitMap.layout(layout);
+      circuitMap.drawPositions(packet);
+    }
+    const status = byId('liveMapStatus');
+    const message = !hasOutline && map.hidden ? '等待赛道地图'
+      : isLive && (!packet || !hasOutline) ? liveUnavailable ? '位置数据暂未更新' : '等待本场车手位置' : '';
+    status.hidden = !message;
+    setText(status.id, message);
+    setText('liveMapCaption', packet ? '位置按小段计时估算' : hasOutline ? '轮廓与弯角' : map.hidden ? '' : '官方赛道布局');
+  }
+
+  const flags = {
+    1: '赛道绿旗', 2: '赛道黄旗', 4: '安全车', 5: '赛道红旗', 6: '虚拟安全车', 7: '虚拟安全车即将结束',
+  };
+
+  function drawTrackState(packet) {
+    const flag = byId('liveTrackState');
+    const state = flags[packet?.flag] ?? '';
+    flag.dataset.flag = packet?.flag ?? '';
+    flag.hidden = !state;
+    setText(flag.id, state);
+    const lap = byId('liveLapStatus');
+    lap.hidden = !packet?.lap;
+    setText(lap.id, packet?.lap ? 'L' + packet.lap + (packet.totalLaps ? ' / ' + packet.totalLaps : '') : '');
   }
 
   function draw() {
-    const { session, phase, mode, details, news, bulletins, layout, generatedAt, scheduleUnavailable, archiveUnavailable } = snapshot ?? {};
+    const { session, phase, mode, news, bulletins, layout, generatedAt, scheduleUnavailable, archiveUnavailable } = snapshot ?? {};
     const isLive = mode === 'live' || mode === 'settling';
+    activeFeed(isLive && !document.hidden ? session : undefined);
+    const details = livePacket
+      ? { ...livePacket, session, controlAvailable: true, radioAvailable: true }
+      : snapshot?.details;
+    currentDetails = details;
     const focus = document.activeElement;
     const focusMoves = session ? gallery.contains(focus) : raceData.contains(focus);
     const returningToGallery = !session && gallery.hidden;
@@ -483,13 +452,11 @@
     gallery.hidden = Boolean(session);
     raceData.hidden = !session;
     byId('liveSourceNotes').hidden = !session;
-    drawLiveFrames(isLive);
 
     if (!session) {
       if (returningToGallery) leaveScreenFocus();
-      showFrame(mapFrame, false);
-      showFrame(driverFrame, false);
-      showFrame(controlFrame, false);
+      circuitMap.drawPositions(null);
+      paintedPacket = undefined;
       if (recording) stopAudio();
       drawGallery();
       if (focusMoves) byId('liveGalleryTitle').focus({ preventScroll: true });
@@ -497,7 +464,10 @@
     }
 
     photoRequest = null;
-    drawMap(isLive, session, layout);
+    liveGrid.dataset.phase = phase;
+    liveGrid.dataset.feed = details?.rows.length ? 'ready' : 'waiting';
+    drawMap(session, liveLayout ?? layout, isLive);
+    drawTrackState(livePacket);
     byId('liveQualifyingDetails').hidden = !isLive || !/qualifying|shootout/i.test(session.name);
     setText('liveState', states[phase]);
     byId('liveState').dataset.state = phase;
@@ -513,7 +483,7 @@
     if (!details?.rows.some(row => row.driver.number === driverFocus)) driverFocus = details?.rows[0]?.driver.number;
     drawMetrics(details);
     drawTiming(details, mode);
-    drawDriver(details, isLive);
+    drawDriver(details);
     drawTimeline(details, isLive);
     drawBulletins(news, bulletins);
     const timestamp = byId('liveSnapshotAt');
@@ -663,10 +633,9 @@
     request?.abort();
     request = null;
     refreshButton.removeAttribute('aria-busy');
-    drawLiveFrames(false);
-    showFrame(mapFrame, false);
-    showFrame(controlFrame, false);
-    showFrame(driverFrame, false);
+    activeFeed(undefined);
+    paintedPacket = undefined;
+    circuitMap.drawPositions(null);
     leaveScreenFocus();
     stopAudio();
   }
@@ -734,7 +703,7 @@
     const filter = event.target.closest('[data-live-filter]');
     if (filter) {
       setTimelineFilter(filter.dataset.liveFilter);
-      drawTimeline(snapshot?.details, ['live', 'settling'].includes(snapshot?.mode));
+      drawTimeline(currentDetails, ['live', 'settling'].includes(snapshot?.mode));
       byId('liveTimeline').scrollTop = 0;
       return;
     }
@@ -746,12 +715,12 @@
         button.setAttribute('aria-pressed', String(selected));
         button.closest('tr').toggleAttribute('data-focus-driver', selected);
       });
-      drawDriver(snapshot?.details, false);
+      drawDriver(currentDetails);
       return;
     }
     const play = event.target.closest('[data-recording]');
     if (!play || !link(play.dataset.recording)) return;
-    recording = snapshot?.details?.radio.find(clip => clip.url === play.dataset.recording);
+    recording = currentDetails?.radio.find(clip => clip.url === play.dataset.recording);
     if (!recording) return;
     setText('liveRecording', [driverName(recording.driver), clock(recording.date), recording.source].filter(Boolean).join(' · '));
     const player = byId('livePlayer');
@@ -768,9 +737,12 @@
   audio.addEventListener('playing', () => { byId('liveAudioStatus').hidden = true; });
   document.addEventListener('visibilitychange', () => {
     if (!visible) return;
-    if (document.hidden) clearTimeout(timer);
-    else {
+    if (document.hidden) {
+      clearTimeout(timer);
+      activeFeed(undefined);
+    } else {
       syncSessionWindow();
+      draw();
       refresh();
     }
   });
