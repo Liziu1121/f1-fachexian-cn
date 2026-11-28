@@ -2,7 +2,7 @@ import { request } from './feeds.mjs';
 import { withArchiveAudio } from './radio-archive.mjs';
 
 export const archiveDelay = 30 * 60_000;
-export const dashboardArchiveVersion = 4;
+export const dashboardArchiveVersion = 5;
 const api = 'https://api.openf1.org/v1';
 let nextRequest = Promise.resolve();
 
@@ -53,6 +53,27 @@ export function mirrorCalendar(data) {
   });
 }
 
+export function circuitLayoutKey(session) {
+  if (!Number.isInteger(session?.circuitKey) || session.circuitKey <= 0) return '';
+  return `${new Date(session.startsAt).getUTCFullYear()}-${session.circuitKey}`;
+}
+
+export async function circuitLayout(session) {
+  const year = new Date(session.startsAt).getUTCFullYear();
+  const url = new URL(`https://api.t1f1.com/api/static/circuits/${session.circuitKey}/data`);
+  url.searchParams.set('year', year);
+  const { data } = await request(url).then(response => response.json());
+  const { x, y } = data?.track_outline ?? {};
+  if (Number(data?.year) !== year || Number(data.circuit_id) !== session.circuitKey ||
+      !Array.isArray(x) || !Array.isArray(y) || x.length !== y.length || x.length < 3 || x.length > 12_000 ||
+      !x.every(Number.isFinite) || !y.every(Number.isFinite)) return null;
+  const corners = (data.corners ?? []).flatMap(({ number, position, letter }) => {
+    if (!Number.isInteger(number) || !Number.isFinite(position?.x) || !Number.isFinite(position.y)) return [];
+    return [{ x: position.x, y: position.y, label: `${number}${letter ?? ''}` }];
+  });
+  return { x: x.map(Math.round), y: y.map(Math.round), corners, rotation: Number(data.rotation) || 0 };
+}
+
 function lapSummary(laps) {
   const summary = new Map();
   for (const lap of laps) {
@@ -91,7 +112,7 @@ function byDriver(items) {
 function timedLap(lap) {
   if (!lap) return null;
   return {
-    number: lap.lap_number, speed: lap.st_speed, speedTraps: [lap.i1_speed, lap.i2_speed, lap.st_speed],
+    number: lap.lap_number, speed: lap.st_speed,
     sectors: [1, 2, 3].map(i => ({
       time: lap[`duration_sector_${i}`],
       segments: lap[`segments_sector_${i}`] ?? [],
@@ -99,58 +120,15 @@ function timedLap(lap) {
   };
 }
 
-function driverIdentity(rows) {
-  return new Map(rows.map(row => [row.driver_number, {
-    number: row.driver_number, name: row.full_name || row.broadcast_name || row.name_acronym,
-    code: row.name_acronym, team: row.team_name, color: /^[\da-f]{6}$/i.test(row.team_colour) ? `#${row.team_colour}` : null,
-  }]));
-}
-
-function publishedRadio(rows, driver) {
-  return dated(rows).flatMap(row => {
-    const url = radioUrl(row.recording_url);
-    return url ? [{ date: row.date, driver: driver(row.driver_number), url }] : [];
-  });
-}
-
-export async function activeRadio(session) {
-  if (!session?.key) return [];
-  const [radio, drivers] = await Promise.allSettled(['team_radio', 'drivers'].map(name => openF1(name, { session_key: session.key })));
-  const identity = driverIdentity(drivers.value ?? []);
-  return publishedRadio(radio.value ?? [], number => identity.get(number) ?? { number });
-}
-
-async function sampledTelemetry(session, laps) {
-  const recorded = laps.map(row => Date.parse(row.date_start)).filter(Number.isFinite);
-  if (!recorded.length) return null;
-  const midpoint = session.startsAt + (session.endsAt - session.startsAt) * .67;
-  const sample = Math.min(midpoint, Math.max(...recorded));
-  if (!Number.isFinite(sample) || sample < session.startsAt) return null;
-  const params = {
-    session_key: session.key,
-    'date>': new Date(sample - 2200).toISOString(),
-    'date<': new Date(sample + 100).toISOString(),
-  };
-  const [location, speed] = await Promise.allSettled(['location', 'car_data'].map(endpoint => openF1(endpoint, params)));
-  const positions = {};
-  const speeds = {};
-  for (const row of dated(location.value ?? [])) {
-    if (!Object.hasOwn(positions, row.driver_number) && [row.x, row.y].every(Number.isFinite) && (row.x || row.y)) {
-      positions[row.driver_number] = [row.x, row.y];
-    }
-  }
-  for (const row of dated(speed.value ?? [])) {
-    if (!Object.hasOwn(speeds, row.driver_number) && Number.isFinite(row.speed)) speeds[row.driver_number] = row.speed;
-  }
-  return Object.keys(positions).length || Object.keys(speeds).length ? { at: sample, positions, speeds } : null;
-}
-
 export async function archiveDetails(session) {
   const names = ['session_result', 'laps', 'race_control', 'team_radio', 'drivers', 'stints', 'pit', 'weather'];
   if (session.type === 'Race') names.push('intervals');
   const results = await Promise.allSettled(names.map(name => openF1(name, { session_key: session.key })));
   const feeds = Object.fromEntries(names.map((name, index) => [name, results[index].value]));
-  const identity = driverIdentity(feeds.drivers ?? []);
+  const identity = new Map((feeds.drivers ?? []).map(row => [row.driver_number, {
+    number: row.driver_number, name: row.full_name || row.broadcast_name || row.name_acronym,
+    code: row.name_acronym, team: row.team_name, color: /^[\da-f]{6}$/i.test(row.team_colour) ? `#${row.team_colour}` : null,
+  }]));
   const driver = number => identity.get(number) ?? { number };
   const laps = lapSummary(feeds.laps ?? []);
   const stints = byDriver(feeds.stints ?? []);
@@ -178,10 +156,12 @@ export async function archiveDetails(session) {
   const controls = dated(feeds.race_control ?? []);
   const events = controls.filter(row => row.message && !(row.scope === 'Sector' && row.flag === 'CLEAR')).slice(0, 32)
     .map(row => ({ date: row.date, lap: row.lap_number, message: row.message, flag: row.flag }));
-  const clips = publishedRadio(feeds.team_radio ?? [], driver);
+  const clips = dated(feeds.team_radio ?? []).flatMap(row => {
+    const url = radioUrl(row.recording_url);
+    return url ? [{ date: row.date, driver: driver(row.driver_number), url }] : [];
+  }).slice(0, 30);
   const weather = dated(feeds.weather ?? [])[0];
-  const [radio, telemetry] = await Promise.all([withArchiveAudio(session, clips), sampledTelemetry(session, feeds.laps ?? [])]);
-  return { session, rows, events, radio, telemetry,
+  return { session, rows, events, radio: await withArchiveAudio(session, clips),
     controlAvailable: Boolean(feeds.race_control), radioAvailable: Boolean(feeds.team_radio),
     weather: weather ? { date: weather.date, air: weather.air_temperature, track: weather.track_temperature,
       humidity: weather.humidity, wind: weather.wind_speed, rain: weather.rainfall } : null,

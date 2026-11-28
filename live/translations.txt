@@ -162,3 +162,7 @@ F1 官网照片|F1 photo source
 领先车手详情|Session leader
 赛中排名、赛道状态和估算位置来自 TELOS。车手对比只使用本场的 OpenF1 遥测数据。赛道轮廓与名单来自 Turn One，官方赛道图来自 F1 官网。|TELOS provides live standings, track status and estimated positions. The driver comparison uses OpenF1 telemetry for the current session. Turn One provides circuit outlines and the grid. The official circuit image comes from Formula 1.
 Turn One 赛道和车手数据|Turn One circuit and driver data
+赛中计时、赛道状态和估算车位来自 TELOS，实时组件以计时源显示的场次为准。赛后圈速、轮胎、天气及已发布电台来自 OpenF1，赛道轮廓来自 Turn One。|TELOS provides live timing, track status and estimated positions. The widgets identify the session they are receiving. OpenF1 provides post-session laps, tyres, weather and published radio. Turn One provides the circuit outline.
+Turn One 赛道数据|Turn One circuit data
+赛前准备|Pre-session
+赛后回顾|Post-session

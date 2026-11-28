@@ -33,8 +33,3 @@
 @media (max-width: 360px) {
   .sector-details { grid-template-columns: 1fr; }
 }
-
-.live-map .track-sectors { margin: 0; padding: 12px; border: 0; border-top: 1px solid var(--pit-edge); border-radius: 0; background: var(--pit-panel); color: inherit; }
-.live-map .sector-details { grid-template-columns: 1fr; }
-.live-map .sector-details li { grid-template-columns: auto 1fr; align-items: baseline; column-gap: 10px; background: var(--pit-raised); }
-.live-map .sector-details li span { grid-column: 1 / -1; color: var(--pit-muted); }

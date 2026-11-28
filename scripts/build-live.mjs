@@ -3,11 +3,8 @@ import { Script } from 'node:vm';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { activeRadio, archiveDelay, archiveDetails, dashboardArchiveVersion, mirrorCalendar, openCalendar } from './live-data.mjs';
-import { pitwallReference } from './pitwall-data.mjs';
+import { archiveDelay, archiveDetails, circuitLayout, circuitLayoutKey, dashboardArchiveVersion, mirrorCalendar, openCalendar } from './live-data.mjs';
 import { fiaBulletins, liveNews } from './feeds.mjs';
-import { withArchiveAudio } from './radio-archive.mjs';
-import { populateRadioText } from './radio-text.mjs';
 import { installPdfReader } from './pdf-runtime.mjs';
 import { regulations } from './edition.mjs';
 import { installContent, translateLiveHeadlines } from './build-content.mjs';
@@ -46,7 +43,7 @@ async function installDashboard() {
   addAfter('  <link rel="stylesheet" href="./live.css">', '\n  <link rel="stylesheet" href="./circuit-sectors.css">');
   addAfter('  <link rel="stylesheet" href="./circuit-sectors.css">', '\n  <link rel="stylesheet" href="./home.css">');
   addBefore('  <script defer src="./app.js"></script>',
-    '  <script defer src="./circuit-sectors.js"></script>\n  <script defer src="./pitwall.js"></script>\n  <script defer src="./live.js"></script>\n  <script defer src="./regulations.js"></script>\n');
+    '  <script defer src="./circuit-sectors.js"></script>\n  <script defer src="./live.js"></script>\n  <script defer src="./regulations.js"></script>\n');
   addBefore('      <a href="#/weekend" data-nav="weekend" class="nav-weekend">',
     '      <a href="#/live" data-nav="live" class="nav-live">比赛实况</a>\n');
   addAfter('        <a class="menu-group-title" href="#/trackside" data-nav="trackside">赛道上</a>',
@@ -82,7 +79,7 @@ async function installDashboard() {
 
   await Promise.all([
     ...[['index.html', html], ['app.js', routes], ['locale.js', labels]].map(([file, content]) => writeFile(join(site, file), content)),
-    ...['live.js', 'pitwall.js', 'regulations.js', 'live.css', 'circuit-sectors.js', 'circuit-sectors.css'].map(file => copyFile(join(sources, file), join(site, file))),
+    ...['live.js', 'regulations.js', 'live.css', 'circuit-sectors.js', 'circuit-sectors.css'].map(file => copyFile(join(sources, file), join(site, file))),
     copyFile(join(root, 'home', 'hero.css'), join(site, 'home.css')),
   ]);
 }
@@ -99,7 +96,7 @@ async function previousSnapshot() {
 async function versionAssets() {
   const index = join(site, 'index.html');
   let page = await readText(index);
-  for (const file of ['live.css', 'circuit-sectors.css', 'home.css', 'content-data.js', 'circuit-sectors.js', 'pitwall.js', 'live.js', 'regulations.js', 'locale.js', 'video.js', 'app.js']) {
+  for (const file of ['live.css', 'circuit-sectors.css', 'home.css', 'content-data.js', 'circuit-sectors.js', 'live.js', 'regulations.js', 'locale.js', 'video.js', 'app.js']) {
     const content = await readFile(join(site, file));
     if (file.endsWith('.js')) new Script(content.toString('utf8'), { filename: file });
     const hash = createHash('sha256').update(content).digest('hex').slice(0, 12);
@@ -143,39 +140,43 @@ async function buildSnapshots(newsFeed) {
   }
   const archives = candidates.filter(session => stored.has(session.key));
 
-  const pitwall = await pitwallReference(schedule, archives, previous.pitwall, now);
   const context = schedule.find(session => session.startsAt <= now) ?? archives[0];
-  const current = now < context?.endsAt + archiveDelay ? context : null;
-  const clips = current ? await activeRadio(current) : [];
-  await Promise.all(archives.map(async session => {
-    const details = stored.get(session.key);
-    if (!details.radio?.length || now - details.radioArchiveCheckedAt < 12 * 3600_000) return;
-    details.radio = await withArchiveAudio(session, details.radio);
-    details.radioArchiveCheckedAt = now;
-  }));
-  const radio = await populateRadioText({ clips: [...clips, ...archives.flatMap(session => stored.get(session.key).radio || [])], cacheDir, root });
-  for (const session of archives) {
-    const details = stored.get(session.key);
-    details.radio = (details.radio || []).map(radio);
-  }
+  const next = schedule.findLast(session => session.startsAt > now);
+  const layoutCache = new Map(Object.entries(previous.layouts ?? {}));
+  const layoutSessions = new Map([context, next, archives[0]].filter(circuitLayoutKey).map(session => [circuitLayoutKey(session), session]));
+  const layouts = Object.fromEntries((await Promise.all([...layoutSessions].map(async ([key, session]) => {
+    let layout = layoutCache.get(key);
+    if (!layout) {
+      layout = await circuitLayout(session).catch(error => {
+        console.warn(`Circuit layout ${key}: ${error.message}`);
+        return null;
+      });
+      if (layout) layoutCache.set(key, layout);
+    }
+    return [key, layout];
+  }))).filter(([, layout]) => layout));
   const [news, bulletins] = await Promise.all([
     liveNews(context, now, newsFeed).then(feed => translateLiveHeadlines(feed, cacheDir)),
     fiaBulletins(context, schedule),
   ]);
   const sameContext = context?.startsAt === previous.contextStartsAt;
   const index = {
-    generatedAt: now, schedule, archives, pitwall, activeRadio: current && { session: current, clips: clips.map(radio) }, contextStartsAt: context?.startsAt,
+    generatedAt: now, schedule, archives, layouts, contextStartsAt: context?.startsAt,
     news: sameContext && news.scope === 'unavailable' ? previous.news ?? news : news,
     bulletins: sameContext && bulletins.unavailable ? previous.bulletins ?? bulletins : bulletins,
   };
   await Promise.all([mkdir(snapshots, { recursive: true }), mkdir(cacheDir, { recursive: true })]);
   await Promise.all(archives.map(async session => {
     const [news, bulletins] = await Promise.all([liveNews(session, now, newsFeed), fiaBulletins(session, schedule)]);
-    await writeJson(join(snapshots, `${session.key}.json`), { details: stored.get(session.key), news, bulletins });
+    const details = stored.get(session.key);
+    // Snapshots made by the newer dashboard can contain more than 30 recordings.
+    await writeJson(join(snapshots, `${session.key}.json`), {
+      details: { ...details, radio: details.radio?.slice(0, 30) ?? [] }, news, bulletins,
+    });
   }));
   await writeJson(join(snapshots, 'index.json'), index);
   const latest = Object.fromEntries(archives.map(session => [session.key, stored.get(session.key)]));
-  await writeJson(join(cacheDir, 'snapshots.json'), { ...index, archives: latest });
+  await writeJson(join(cacheDir, 'snapshots.json'), { ...index, archives: latest, layouts: Object.fromEntries([...layoutCache].slice(-32)) });
   console.log(`Live centre ready: ${schedule.length} calendar entries, ${archives.length} archives, ${index.news.items.length} news items.`);
 }
 

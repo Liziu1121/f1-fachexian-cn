@@ -25,7 +25,8 @@
             <p class="live-session-meta">
               <span class="live-state" id="liveState" role="status">正在读取实况</span>
               <span id="liveSchedule"></span>
-              </p>
+              <span id="liveMeta"></span>
+            </p>
           </div>
           <div class="live-controls">
             <button class="action outline" id="liveRefresh" type="button">刷新</button>
@@ -34,55 +35,54 @@
           </div>
         </header>
         <div class="live-status-frame" id="livePublicStatus" hidden>
-          <iframe id="liveStatusFrame" title="赛道状态和圈数" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" data-src="https://telos.connexastudios.com/obs/status"></iframe>
+          <iframe id="liveStatusFrame" title="赛道状态和圈数" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" data-src="https://telos.connexastudios.com/obs/status?bg=solid"></iframe>
         </div>
+        <dl class="live-metrics" id="liveMetrics" hidden></dl>
         <p class="live-notice" id="liveNotice" hidden></p>
 
         <div class="live-grid">
           <section class="live-panel live-board" aria-labelledby="liveTimingTitle">
             <div class="live-panel-head">
-              <h2 id="liveTimingTitle">车手排名</h2>
+              <h2 id="liveTimingTitle">计时榜</h2>
               <p class="sub" id="liveTimingCaption"></p>
             </div>
             <div id="livePublicTiming" hidden>
               <div class="live-timing-window" role="region" aria-label="实时分段计时" tabindex="0">
-                <iframe id="liveTimingFrame" title="车手实时排名" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" data-src="https://telos.connexastudios.com/obs/table?cols=pit%2Ctyre%2Claps%2Cleader%2Cgap%2Clast%2Cbest"></iframe>
+                <iframe id="liveTimingFrame" title="实时分段计时" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" data-src="https://telos.connexastudios.com/obs/table?cols=pit%2Ctyre%2Claps%2Cleader%2Cgap%2Clast%2Cbest%2Cmini%2Cls%2Cbs&amp;bg=solid"></iframe>
               </div>
-              <p class="sub live-timing-hint">横向滚动查看更多列。</p>
+              <p class="sub live-timing-hint">左右滑动可查看完整分段。</p>
             </div>
-            <div class="live-scroll live-rank-list" id="liveNativeTiming" tabindex="0" role="region" aria-labelledby="liveTimingTitle" hidden></div>
+            <div class="live-scroll live-native-timing" id="liveTiming" tabindex="0" role="region" aria-labelledby="liveTimingTitle"></div>
+            <div class="live-sector-key" id="liveSectorKey" hidden>
+              <span><i data-segment="2051"></i> 全场最快</span>
+              <span><i data-segment="2049"></i> 个人最快</span>
+              <span><i data-segment="2048"></i> 慢于最佳</span>
+              <span><i data-segment="2064"></i> 维修区</span>
+            </div>
           </section>
 
+          <div class="live-centre">
             <section class="live-panel live-map" aria-labelledby="liveMapTitle">
               <div class="live-panel-head"><h2 id="liveMapTitle">赛道地图</h2><span class="sub" id="liveMapCaption"></span></div>
-              <div class="live-track-stage">
-                <iframe id="liveTrackFrame" title="车手实时位置（估算）" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" data-src="https://telos.connexastudios.com/obs/map?labels=22" hidden></iframe>
-                <canvas id="liveTrackCanvas" role="img" aria-label="赛道与车手位置" hidden></canvas>
-                <img id="liveTrackLayout" class="live-track-layout" alt="F1 官方赛道图" decoding="async" hidden>
-                <p class="live-empty sub" id="liveMapStatus" role="status">等待赛道地图</p>
+              <div class="live-map-window" id="liveMapWindow" hidden>
+                <iframe id="liveMapFrame" title="TELOS 赛道地图" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" data-src="https://telos.connexastudios.com/obs/map?labels=22&amp;bg=solid"></iframe>
               </div>
-              <div class="live-map-roster live-scroll" id="liveMapRoster" aria-label="车队颜色和车手号码"></div>
-              <button class="live-map-preview" id="liveMapOpen" type="button" aria-haspopup="dialog" aria-controls="liveMapDialog" aria-label="放大查看官方赛道图" hidden>
-                <span>查看 F1 官方赛道图 ↗</span>
-              </button>
-              <div id="liveCircuitSectors" hidden></div>
-            </section>
-            <section class="live-panel live-sectors" aria-labelledby="liveSectorTitle">
-              <div class="live-panel-head"><h2 id="liveSectorTitle">分段计时与测速</h2><span class="sub" id="liveSectorCaption"></span></div>
-              <div class="live-sector-window live-scroll" id="livePublicSectors" hidden>
-                <iframe id="liveSectorFrame" title="实时分段与小段" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" data-src="https://telos.connexastudios.com/obs/table?cols=ls%2Cbs%2Cmini"></iframe>
+              <div class="live-circuit-frame" id="liveCircuitFrame" hidden>
+                <canvas id="liveCircuit" role="img" aria-label="赛道轮廓和弯角编号"></canvas>
               </div>
-              <div class="live-scroll live-sector-window" id="liveSectorData" tabindex="0" role="region" aria-labelledby="liveSectorTitle"></div>
+              <img id="liveTrackLayout" class="live-track-layout" alt="官方赛道布局" hidden>
+              <p class="live-empty sub" id="liveMapStatus">等待赛道地图</p>
             </section>
-            <div class="live-wall-side">
             <section class="live-panel" id="liveDriverPanel" aria-labelledby="liveDriverTitle">
-              <div class="live-panel-head"><h2 id="liveDriverTitle">领先车手详情</h2></div>
-              <div class="live-driver-window" id="liveDriverWindow">
-                <iframe id="liveDriverFrame" title="领先车手实时详情" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" data-src="https://telos.connexastudios.com/obs/driver"></iframe>
+              <div class="live-panel-head"><h2 id="liveDriverTitle">车手详情</h2><span class="sub" id="liveDriverCode"></span></div>
+              <div class="live-driver-window" id="liveDriverWindow" hidden>
+                <iframe id="liveDriverFrame" title="领先车手实时详情" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" loading="lazy" data-src="https://telos.connexastudios.com/obs/driver?bg=solid"></iframe>
               </div>
-              <div id="liveNativeLeader" hidden></div>
+              <div id="liveDriverDetail" class="live-driver-detail"></div>
             </section>
+          </div>
 
+          <div class="live-sidebar">
             <section class="live-panel live-stream" aria-labelledby="liveControlTitle">
               <div class="live-panel-head"><h2 id="liveControlTitle">赛况流</h2><span class="sub" id="liveTimelineCount" aria-live="polite"></span></div>
               <div class="live-filters" aria-label="筛选赛况流">
@@ -92,66 +92,39 @@
               </div>
               <div id="livePublicControl" hidden>
                 <div class="live-control-window" role="region" aria-label="赛会消息" tabindex="0">
-                  <iframe id="liveControlFrame" title="TELOS 赛会即时消息" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" data-src="https://telos.connexastudios.com/obs/rc?last=1&amp;seconds=60"></iframe>
+                  <iframe id="liveControlFrame" title="TELOS 赛会即时消息" sandbox="allow-scripts allow-same-origin" referrerpolicy="no-referrer" loading="lazy" data-src="https://telos.connexastudios.com/obs/rc?last=1&amp;bg=solid&amp;seconds=60"></iframe>
                 </div>
                 <p class="live-feed-note sub">新通知出现后会在这里短暂显示。</p>
               </div>
               <div id="livePlayer" class="live-player" hidden>
                 <p class="sub" id="liveRecording"></p>
                 <audio id="liveAudio" controls preload="none" aria-label="播放车队电台"></audio>
-                <p class="live-radio-text" id="liveRadioText"></p>
                 <p class="sub" id="liveAudioStatus" role="status" hidden></p>
                 <a class="text-link" id="liveRecordingLink" target="_blank" rel="noopener">打开原始录音</a>
               </div>
               <div id="liveTimeline" class="live-scroll" tabindex="0" role="region" aria-labelledby="liveControlTitle"></div>
             </section>
-            </div>
+            <section class="live-panel live-briefing" aria-labelledby="liveNewsTitle">
+              <div class="live-panel-head"><h2 id="liveNewsTitle">本站资讯</h2><span class="sub" id="liveNewsScope" hidden></span></div>
+              <p class="sub live-feed-note" id="liveSnapshotAt" hidden></p>
+              <div class="live-scroll live-briefing-scroll" tabindex="0" role="region" aria-labelledby="liveNewsTitle">
+                <h3 id="liveFiaTitle">FIA 公告</h3>
+                <div id="liveBulletins"></div>
+                <h3>新闻</h3>
+                <div id="liveHeadlines"></div>
+              </div>
+            </section>
+          </div>
         </div>
-        <section class="live-panel live-driver-compare" id="liveComparePanel" aria-labelledby="liveCompareTitle" hidden>
-          <div class="live-panel-head"><h2 id="liveCompareTitle">车手数据对比</h2></div>
-          <div class="live-compare-tools">
-            <label>第一位车手<select id="liveCompareFirst"></select></label>
-            <label>第二位车手<select id="liveCompareSecond"></select></label>
-            <p class="sub" id="liveCompareStatus" role="status"></p>
-          </div>
-          <div id="liveCompareResult" class="live-scroll" role="region" aria-labelledby="liveCompareTitle" tabindex="0"></div>
-        </section>
-        <section class="live-panel live-briefing" aria-labelledby="liveNewsTitle">
-          <div class="live-panel-head"><h2 id="liveNewsTitle">本站资讯</h2><span class="sub" id="liveNewsScope" hidden></span></div>
-          <p class="sub live-feed-note" id="liveSnapshotAt" hidden></p>
-          <div class="live-scroll live-briefing-scroll" tabindex="0" role="region" aria-labelledby="liveNewsTitle">
-            <h3 id="liveFiaTitle">FIA 公告</h3>
-            <div id="liveBulletins"></div>
-            <h3>新闻</h3>
-            <div id="liveHeadlines"></div>
-          </div>
-        </section>
       </div>
-      <dialog class="live-map-dialog" id="liveMapDialog" aria-labelledby="liveMapDialogTitle">
-        <div class="live-map-toolbar">
-          <h2 id="liveMapDialogTitle">F1 官方赛道图</h2>
-          <button class="action outline" id="liveMapClose" type="button">关闭</button>
-        </div>
-        <div class="live-map-toolbar live-map-zoom-controls" aria-label="赛道图缩放">
-          <button class="action outline" id="liveMapZoomOut" type="button" aria-label="缩小赛道图">−</button>
-          <output id="liveMapZoomLevel" aria-live="polite">100%</output>
-          <button class="action outline" id="liveMapZoomIn" type="button" aria-label="放大赛道图">+</button>
-          <button class="action outline" id="liveMapFit" type="button">适应窗口</button>
-          <a class="text-link" id="liveMapOriginal" target="_blank" rel="noopener noreferrer">打开官方原图</a>
-        </div>
-        <p class="sub live-map-help">放大后可拖动或滚动查看弯角和分段细节。</p>
-        <div class="live-map-viewer" id="liveMapViewer" tabindex="0" role="region" aria-label="可缩放的官方赛道图">
-          <img id="liveMapZoomImage" alt="F1 官方赛道图" draggable="false" decoding="async">
-        </div>
-      </dialog>
     </div>
     <details class="live-notes" id="liveSourceNotes" hidden>
       <summary>数据来源与备用入口</summary>
-      <p class="sub">赛中排名、赛道状态和估算位置来自 TELOS。车手对比只使用本场的 OpenF1 遥测数据。赛道轮廓与名单来自 Turn One，官方赛道图来自 F1 官网。</p>
+      <p class="sub">赛中计时、赛道状态和估算车位来自 TELOS，实时组件以计时源显示的场次为准。赛后圈速、轮胎、天气及已发布电台来自 OpenF1，赛道轮廓来自 Turn One。</p>
       <ul>
         <li><a class="text-link" href="https://telos.connexastudios.com/obs" target="_blank" rel="noopener noreferrer">TELOS 实况组件</a></li>
         <li><a class="text-link" href="https://openf1.org/docs/" target="_blank" rel="noopener noreferrer">OpenF1 数据说明</a></li>
-        <li><a class="text-link" href="https://docs.t1f1.com/docs/endpoints" target="_blank" rel="noopener noreferrer">Turn One 赛道和车手数据</a></li>
+        <li><a class="text-link" href="https://docs.t1f1.com/docs/endpoints" target="_blank" rel="noopener noreferrer">Turn One 赛道数据</a></li>
         <li><a class="text-link" href="https://f1archive.org/docs" target="_blank" rel="noopener noreferrer">F1Archive 电台档案</a></li>
         <li id="liveQualifyingDetails" hidden><a class="text-link" href="https://www.formuradar.com/en/live" target="_blank" rel="noopener noreferrer">查看排位差距和淘汰区</a></li>
         <li><a class="text-link" href="https://www.f1livedata.com/race_control" target="_blank" rel="noopener noreferrer">查看完整赛会消息</a></li>
