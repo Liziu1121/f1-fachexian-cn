@@ -1,8 +1,10 @@
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
+import { newsWindow } from './edition.mjs';
 import { request, xmlText } from './feeds.mjs';
 
 const hour = 3600_000;
+const originalLimit = 5;
 const publishers = new Map([
   ['F1', ['www.formula1.com', /^\/en\/latest\/article\//]],
   ['Sky Sports', ['www.skysports.com', /^\/f1\/news\//]],
@@ -61,10 +63,13 @@ export async function sourceNews(rows, existingNotes, results, cacheDir, now = D
   const file = join(cacheDir, 'verified-source-news.json');
   const archive = await readFile(file, 'utf8').then(JSON.parse, error => {
     if (error.code !== 'ENOENT') throw error;
-    return { articles: {}, hour: null, count: 0 };
+    return { articles: {}, editionWindow: null, count: 0 };
   });
-  const current = Math.floor(now / hour);
-  if (archive.hour !== current) { archive.hour = current; archive.count = 0; }
+  const current = newsWindow(now);
+  if (archive.editionWindow !== current) {
+    archive.editionWindow = current;
+    archive.count = 0;
+  }
   const recent = rows.filter(row => validSource(row) && !ignored.test(row[2]) &&
     Date.parse(row[1]) <= now && Date.parse(row[1]) >= now - 48 * hour);
   const articles = recent.filter(row => row[7].source === 'F1');
@@ -100,7 +105,7 @@ export async function sourceNews(rows, existingNotes, results, cacheDir, now = D
       if (primary && words(primary.body).has(family)) archive.articles[id] = siteReport(id, 'F1 官方来源', [primary]);
     }
     const originalId = 'original-' + id;
-    if (archive.count >= 10 || archive.articles[originalId]) continue;
+    if (archive.count >= originalLimit || archive.articles[originalId]) continue;
     const relatedMedia = media.filter(row => topic[code].test(row[2]) &&
       words(row[2]).has(family) && Math.abs(Date.parse(row[1]) - Date.parse(stamp)) < 6 * hour);
     const byPublisher = ['Sky Sports', 'Motorsport.com'].map(name => relatedMedia.find(row => row[7].source === name));

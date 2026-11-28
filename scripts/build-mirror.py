@@ -62,7 +62,7 @@ with ThreadPoolExecutor(max_workers=4) as pool:
     try:
         edition = json.loads(Path('.live-cache/edition.json').read_text(encoding='utf-8'))
         refresh_edition = (edition.get('version') != 4 or
-                           int(datetime.now(timezone.utc).timestamp() // 3600) != edition['window'])
+                           int(datetime.now(timezone.utc).timestamp() // (2 * 3600)) != edition['window'])
     except (OSError, ValueError, TypeError, KeyError):
         refresh_edition = True
     if refresh_edition:

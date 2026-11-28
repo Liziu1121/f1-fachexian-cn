@@ -107,7 +107,7 @@ function similar(first, second) {
   return shared >= 3 && shared / Math.min(first.size, second.size) >= .55;
 }
 
-export const newsWindow = (now = Date.now()) => Math.floor(now / hours);
+export const newsWindow = (now = Date.now()) => Math.floor(now / (2 * hours));
 
 export async function refreshEdition({ feed, cacheDir }) {
   const path = join(cacheDir, 'edition.json');
