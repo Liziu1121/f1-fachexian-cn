@@ -1,5 +1,105 @@
 [
   {
+    "id": "original-source-b1b1ad0ccf04ef97f380",
+    "date": "2026-11-28T02:15:00Z",
+    "round": "qatar",
+    "source": "F1 发车线",
+    "subjects": [
+      "LEC"
+    ],
+    "references": [
+      {
+        "name": "Sky Sports",
+        "url": "https://www.skysports.com/f1/news/13617143/charles-leclerc-seeking-outlier-as-ferrari-mclaren-red-bull-try-to-catch-mercedes-at-qatar-grand-prix"
+      },
+      {
+        "name": "Motorsport.com",
+        "url": "https://www.motorsport.com/f1/news/charles-leclerc-explains-qatar-spin-after-painfully-slow-day-for-ferrari/10878445/"
+      },
+      {
+        "name": "F1 官方成绩",
+        "url": "https://www.formula1.com/en/results/2026/races/1301/qatar/practice/2"
+      }
+    ],
+    "titleZh": "勒克莱尔二练打转换底板，法拉利仍在追查卡塔尔速度问题",
+    "titleEn": "Ferrari searches for pace after Leclerc’s Qatar practice spin and floor change",
+    "fullTextZh": [
+      "卡塔尔大奖赛周五两场练习，勒克莱尔均排第七，汉密尔顿均排第八。法拉利在第二场还损失了一段跑圈时间。勒克莱尔驶出七号弯时打转，车队随后更换了赛车底板。",
+      "勒克莱尔向媒体说明了损伤的先后顺序。他此前驶过路肩时已经损坏底板，滑进砂石区后损伤加重。更换底板让他少跑了几圈中性胎，即便后来换上软胎，成绩也没有明显改善。",
+      "维修只解释了部分跑圈损失。勒克莱尔表示，法拉利当天在轻油和重油条件下都缺少速度。他也提到，梅赛德斯的优势大过预期，究竟是对手在卢赛尔特别快，还是法拉利本身没有发挥出赛车的速度，需要继续看数据。",
+      "第二练习赛的官方成绩给出了排位赛前的参照。安东内利和拉塞尔包揽前两名，诺里斯第三。法拉利周六还有第三场练习，可以用来复核周五发现的问题。"
+    ],
+    "fullTextEn": [
+      "Charles Leclerc finished seventh in both Friday practices in Qatar, with Ferrari team-mate Lewis Hamilton eighth in each. Leclerc also lost running in the second session after spinning at the exit of Turn 7. Ferrari replaced the floor before he returned to the track.",
+      "Leclerc said a kerb had damaged the floor earlier in the session and the trip through the gravel made it worse. The change reduced his time on the medium tyres. He did not find a meaningful improvement when he later switched to the softs.",
+      "The repair accounted for some lost running, while Leclerc described a broader pace problem on both low and high fuel. He also said the size of Mercedes’ advantage was unusual. Ferrari still had to establish how much of the gap came from its own performance at Lusail.",
+      "The final FP2 classification put Kimi Antonelli and George Russell first and second for Mercedes, with Lando Norris third. The third practice session gives Ferrari another chance to check its findings before qualifying."
+    ]
+  },
+  {
+    "id": "11hIcFNT6zuvEG0mwAggDn",
+    "date": "2026-11-27T20:38:00Z",
+    "round": "qatar",
+    "source": "F1 官方来源",
+    "subjects": [
+      "GAS"
+    ],
+    "references": [
+      {
+        "name": "F1 官网",
+        "url": "https://www.formula1.com/en/latest/article/its-never-nice-gasly-explains-dramatic-high-speed-spin-during-qatar-practice.11hIcFNT6zuvEG0mwAggDn"
+      },
+      {
+        "name": "F1 官方视频",
+        "url": "https://www.formula1.com/en/video/2026-qatar-gp-fp2-session-red-flagged-after-gasly-beaches-his-alpine-in-the-gravel-trap.1883039498894817521"
+      },
+      {
+        "name": "FIA 二练赛报",
+        "url": "https://www.fia.com/news/f1-antonelli-leads-mercedes-one-two-disrupted-qatar-fp2"
+      }
+    ],
+    "titleZh": "加斯利谈卡塔尔二练打转：轮胎温度偏低，赛车出现触底",
+    "titleEn": "Gasly points to cool tyres and bottoming after Qatar FP2 spin",
+    "fullTextZh": [
+      "卡塔尔大奖赛第二次练习赛中，加斯利驾驶 Alpine 赛车高速打转后陷入砂石区。赛会出示红旗，工作人员清理车辆后才恢复计时。这是这场练习赛的第二次红旗。",
+      "加斯利赛后向 F1 官网解释，当时轮胎温度偏低，赛车也比预想更容易触底。他把两者列为失控的相关因素。第一次红旗期间的等待打断了跑圈节奏，重新出场后，轮胎需要重新进入工作温度。",
+      "卢赛尔的高速弯对车身稳定性要求较高。加斯利的事故让 Alpine 少了一段二练时间，也给车队留下一个具体的检查项目：回看触底和轮胎温度各自在失控前如何变化。"
+    ],
+    "fullTextEn": [
+      "Pierre Gasly brought out the second red flag of Qatar’s second practice when he spun at high speed and his Alpine became stranded in the gravel. Running resumed after the car was recovered.",
+      "Speaking to Formula 1 after practice, Gasly pointed to low tyre temperatures and more bottoming than he had expected. The earlier stoppage had broken up the running and drivers had to bring their tyres back up to temperature when they returned to the circuit.",
+      "Alpine lost track time with Gasly in a session that had already been interrupted. His account identifies two areas for the team to review before running resumes: how the floor behaved over the circuit and how quickly the tyres warmed after the restart."
+    ]
+  },
+  {
+    "id": "53YK6RxY4GWQ0WvgCUm3xh",
+    "date": "2026-11-27T18:38:00Z",
+    "round": "italy",
+    "source": "F1 官方来源",
+    "references": [
+      {
+        "name": "F1 官网",
+        "url": "https://www.formula1.com/en/latest/article/audis-italian-grand-prix-appeal-over-tsunoda-restart-decision-is-dismissed.53YK6RxY4GWQ0WvgCUm3xh"
+      },
+      {
+        "name": "FIA 国际上诉法院",
+        "url": "https://api.fia.com/news/ica-decision-2026-14-dated-27-11-26-operative-part-audi-revolut-f1-team-2026-fia-formula-one"
+      }
+    ],
+    "titleZh": "国际上诉法院驳回奥迪申诉，意大利大奖赛原裁决维持",
+    "titleEn": "FIA court dismisses Audi’s appeal over the Italian Grand Prix start",
+    "fullTextZh": [
+      "国际汽联国际上诉法院在 11 月 25 日于巴黎听取奥迪的申诉，并于 11 月 27 日公布裁决结果。奥迪针对 2026 年意大利大奖赛赛会第 69 号决定提出的申诉被驳回。",
+      "争议发生在蒙扎站正赛起步程序中，涉及角田裕毅是否应在额外暖胎圈后从维修区末端起步。赛会在赛后调查了运动规则第 B5.9.4 条的适用情况，当时决定不采取进一步行动。",
+      "本次裁决维持了赛会原决定。奥迪两名车手博托莱托和霍肯伯格在该场比赛分别排名第十一和第十二。国际汽联此次公布的是裁决结果，详细理由将另行发布。"
+    ],
+    "fullTextEn": [
+      "The FIA International Court of Appeal dismissed Audi’s challenge to decision 69 of the stewards at the 2026 Italian Grand Prix. The hearing took place in Paris on 25 November and the court announced the outcome on 27 November.",
+      "The case concerned the start procedure at Monza and whether Yuki Tsunoda had to start from the end of the pit lane after an extra formation lap. The stewards examined the application of article B5.9.4 after the race and took no further action.",
+      "The dismissal leaves the original decision in place. Audi drivers Gabriel Bortoleto and Nico Hülkenberg had finished 11th and 12th respectively. The FIA released the operative decision and said its detailed reasons would follow."
+    ]
+  },
+  {
     "id": "qatar-antonelli-medium-tyre-fp1",
     "date": "2026-11-27T14:43:00Z",
     "round": "qatar",

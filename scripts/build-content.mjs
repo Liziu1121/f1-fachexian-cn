@@ -266,7 +266,7 @@ export async function installContent({ root, site, cacheDir, replaceOnce }) {
     buildNews(site, cacheDir, notes, edition), writeReports(site, media), sourceReports(root, cacheDir, media), newsPhotoCatalog(site),
   ]);
   Object.assign(notes, editorial.notes, licensed.notes, sourced.notes);
-  const desk = await sourceNews(externalNews.items, notes, cacheDir);
+  const desk = await sourceNews(externalNews.items, notes, editorial, cacheDir);
   Object.assign(notes, desk.notes);
   const merged = new Map([...externalNews.items, ...editorial.items, ...licensed.items, ...sourced.items, ...desk.items]
     .map(row => [row[0], row]));
